@@ -7084,3 +7084,389 @@ void pure_sys_vars(void)
   cdf(interp, "LC_TIME",	pure_int(LC_TIME));
 #endif
 }
+
+
+
+
+namespace matrix { 
+//some templates to ease specialization of matrix functions
+
+//the element type of a matrix
+template <typename t> struct element_of {};
+template <> struct element_of<gsl_matrix> { typedef double type; };
+template <> struct element_of<gsl_matrix_int> { typedef int type; };
+template <> struct element_of<gsl_matrix_symbolic> { typedef pure_expr* type; };
+
+//create a matrix
+template <typename t> t* create_matrix(size_t n,size_t m);
+template <> gsl_matrix* create_matrix<gsl_matrix>(size_t n, size_t m) { return create_double_matrix(n,m); }
+template <> gsl_matrix_int* create_matrix<gsl_matrix_int>(size_t n, size_t m) { return create_int_matrix(n,m); }
+template <> gsl_matrix_symbolic* create_matrix<gsl_matrix_symbolic>(size_t n, size_t m) { return create_symbolic_matrix(n,m); }
+
+//free a matrix
+void matrix_free(gsl_matrix *m) { gsl_matrix_free(m); }
+void matrix_free(gsl_matrix_int *m) { gsl_matrix_int_free(m); }
+void matrix_free(gsl_matrix_symbolic *m) { gsl_matrix_symbolic_free(m); }
+
+//the type tag of a matrix element 
+template <typename t> struct type_tag_of {};
+template <> struct type_tag_of<int32_t> { enum {tag=EXPR::INT}; };
+template <> struct type_tag_of<double>  { enum {tag=EXPR::DBL}; };
+
+//convert a matrix element into an expression
+static inline pure_expr* to_expr(int32_t i) { return pure_int(i); }
+static inline pure_expr* to_expr(double d) { return pure_double(d); }
+static inline pure_expr* to_expr(pure_expr* e) { return e; }
+
+//convert an expression into a matrix element
+template <typename t> static inline t expr_to( pure_expr* e ) ;
+template <> inline double expr_to<double>( pure_expr* e) { return e->data.d; }
+template <> inline int32_t expr_to<int32_t>( pure_expr* e) { return e->data.i; }
+template <> inline pure_expr* expr_to<pure_expr*>( pure_expr* e ) { return e; }
+
+
+
+
+//numeric map loop : optmize common case that the output of the mapped function
+//is all of the same numerical type. If not, fall back to symbolic map loop
+
+template < typename in_mat_type,  
+           typename out_mat_type >
+pure_expr* 
+numeric_map_loop
+( pure_expr *f,       //the function being mapped
+  in_mat_type *in,    //the operand matrix
+  out_mat_type *out,  //the result matrix
+  size_t *lasti,      //last row and column written to 
+  size_t *lastj )     //  before bailing out in the event that
+                      //  the output of f is not the right type
+{
+  typedef typename element_of< in_mat_type>::type  in_elem_type;
+  typedef typename element_of<out_mat_type>::type out_elem_type;
+  
+  in_elem_type *inp = in->data+1;
+  out_elem_type *outp = out->data+1;
+  int32_t ttag = type_tag_of<out_elem_type>::tag; 
+  pure_expr *r; //result
+
+  //we alredy performed the first map, so now we apply f to all but the first
+  //column in the first row..
+  *lasti=0;
+  for (size_t j=1; j<in->size2; ++j,++inp,++outp) {
+    *lastj=j;
+    r = pure_app( f, to_expr(*inp) );
+    if (r->tag != ttag) return r; 
+    *outp = expr_to<out_elem_type>(r);
+    pure_freenew(r);
+  }
+
+  //..then the rest of the rows
+  for (size_t i=1; i<in->size1; ++i) {
+    *lasti=i;
+    inp = in->data+i*in->tda; 
+    outp = out->data+i*out->tda;
+    for (size_t j=0; j<in->size2; ++j,++inp,++outp) {
+      *lastj=j;
+      r = pure_app( f, to_expr(*inp) );
+      if (r->tag != ttag) return r;
+      *outp = expr_to<out_elem_type>(r);
+      pure_freenew(r);
+    }
+  }
+  return 0;
+}
+
+
+//symbolic map loop : mapped function results in heterogenous / non-numerical
+//types. This function may pick up where numerical_map_loop left off, in that
+//case copying out the already-evaluated numbers from the matrix 'num'
+
+template < typename in_mat_type,  //the operand matrix type
+           typename num_mat_type >
+void 
+symbolic_map_loop
+( pure_expr *f,            //the function being mapped
+  in_mat_type *in,         //the operand matrix
+
+  num_mat_type *num,       //the numerical matrix that _would_ have been 
+                           //  the output if the results of f had all been of
+                           //  the same numerical type
+                           
+  gsl_matrix_symbolic *out,//the symbolic matrix that will be the end result
+
+  size_t lasti ,           //some of the map may already be evaluated. 
+  size_t lastj ,           //  lasti,lastj was the last element mapped
+  pure_expr *last )        //  and last is the result
+{
+  typedef typename element_of< in_mat_type>::type  in_elem_type;
+  typedef typename element_of<num_mat_type>::type num_elem_type;
+
+  in_elem_type *inp = 0;
+  pure_expr **outp = 0;
+  num_elem_type *nump = 0;
+
+  //copy the already-evaluated stuff out of num
+  if (lasti>0 || lastj>0) {
+    if (lasti>0) {
+      for (size_t i=0; i<lasti; ++i) {
+        outp = out->data + i*out->tda;
+        nump = num->data + i*num->tda;
+        for (size_t j=0; j<in->size2; ++j,++outp,++nump) {
+          *outp = to_expr(*nump);
+        }
+      }
+    }
+    if (lastj>0) {
+      outp = out->data + lasti*out->tda;
+      nump = num->data + lasti*num->tda;
+      for (size_t j=0; j<lastj; ++j,++outp,++nump) {
+        *outp = to_expr(*nump);
+      }
+    }
+  } 
+
+  out->data[lasti*out->tda+lastj] = last;
+  lastj++;
+  if (lastj>=out->size2) {
+    lasti++;
+    lastj=0;
+    if (lasti>=out->size1) 
+      return;
+  }
+
+  inp  = in->data+lasti*in->tda+lastj;
+  outp = out->data+lasti*out->tda+lastj;
+  //finish the map
+  for (size_t j=lastj; j<in->size2; ++j,++inp,++outp) {
+    pure_expr *t = to_expr(*inp);  
+    pure_ref(t);
+    *outp = pure_app(f,t);
+    pure_unref(t);
+  }
+
+  for (size_t i=lasti+1; i<in->size1; ++i) {
+    inp = in->data+i*in->tda; 
+    outp = out->data+i*out->tda;
+    for (size_t j=0; j<in->size2; ++j,++inp,++outp) {
+      *outp = pure_app(f,to_expr(*inp));
+    }
+  }
+}
+
+
+//generic matrix map, dispatches on input matrix type (the template parameter)
+//and output matrix type, which is guessed from the result type of f (x!0).
+//The function speculates that all f(x!i) will be of the same type for all i.
+//If not, numeric_map_loop bails out and symbolic_map_loop takes over.
+
+template <typename matrix_type>
+pure_expr* matrix_map( pure_expr *f, pure_expr *x )
+{
+  pure_ref(f);
+  pure_ref(x);
+  typedef typename element_of<matrix_type>::type elem_type;
+  matrix_type *xm = static_cast<matrix_type*>(x->data.mat.p);
+
+  //make a guess at what the result type is by the first element
+  pure_expr *first = pure_app(f,to_expr(xm->data[0]));
+  size_t lasti=0,lastj=0;
+  pure_expr *out=0; //final result
+
+  switch(first->tag) {
+#if HAVE_GSL
+    case EXPR::DBL : {
+      gsl_matrix *dm = create_double_matrix(xm->size1,xm->size2);
+      dm->data[0] = first->data.d; 
+      pure_expr *last = numeric_map_loop(f,xm,dm,&lasti,&lastj);
+      if (!last) {
+        out = pure_double_matrix(dm);
+      } else {
+        gsl_matrix_symbolic *sm = create_symbolic_matrix(xm->size1,xm->size2);
+        symbolic_map_loop(f,xm,dm,sm,lasti,lastj,last);
+        gsl_matrix_free(dm);
+        out = pure_symbolic_matrix(sm);
+      }
+    }
+    break;
+    
+    case EXPR::INT : {
+      gsl_matrix_int *im = create_int_matrix(xm->size1,xm->size2);
+      im->data[0] = first->data.i; 
+      pure_expr *last = numeric_map_loop(f,xm,im,&lasti,&lastj);
+      if (!last) { 
+        out = pure_int_matrix(im);
+      } else {
+        gsl_matrix_symbolic *sm = create_symbolic_matrix(xm->size1,xm->size2);
+        symbolic_map_loop(f,xm,im,sm,lasti,lastj,last);
+        gsl_matrix_int_free(im);
+        out = pure_symbolic_matrix(sm);
+      }
+    }
+    break;
+
+    //TODO : catch complex output
+
+#endif //HAVE_GSL
+
+    default : //for anything else, default to symbolic. 
+      gsl_matrix_symbolic *sm = create_symbolic_matrix(xm->size1,xm->size2);
+      symbolic_map_loop(f,xm,static_cast<matrix_type*>(0),sm,0,0,first);
+      out = pure_symbolic_matrix(sm);
+  }
+  if (first->refc==0) pure_freenew(first);
+  pure_unref(f);
+  pure_unref(x);
+  return out;
+}
+
+
+
+
+
+
+
+
+
+
+//generic matrix foldl
+template <typename matrix_type>
+pure_expr* matrix_foldl( pure_expr *f, pure_expr *z, pure_expr *x )
+{
+  pure_ref(f);
+  pure_ref(x);
+  matrix_type *xm = static_cast<matrix_type*>(x->data.mat.p);
+  typedef typename element_of<matrix_type>::type elem_type;
+
+  for (size_t i=0; i<xm->size1; ++i) {
+    elem_type *p = xm->data+i*xm->tda;
+    for (size_t j=0; j<xm->size2; ++j,++p) {
+      z = pure_appl( f, 2, z, to_expr(*p)  );
+    }
+  }
+  pure_unref(f);
+  pure_unref(x);
+  return z;
+}
+
+
+//generic matrix foldr
+template <typename matrix_type>
+pure_expr* matrix_foldr( pure_expr *f, pure_expr *z, pure_expr *x )
+{
+  pure_ref(f);
+  pure_ref(x);
+  matrix_type *xm = static_cast<matrix_type*>(x->data.mat.p);
+  typedef typename element_of<matrix_type>::type elem_type;
+
+  for (ptrdiff_t i=xm->size1-1; i>=0; --i) {
+    elem_type *p = xm->data+i*xm->tda+xm->size2-1;
+    for (ptrdiff_t j=xm->size2-1; j>=0; --j,--p) {
+      z = pure_appl( f, 2, to_expr(*p), z  );
+    }
+  }
+  pure_unref(f);
+  pure_unref(x);
+  return z;
+}
+
+
+//generic matrix filter. Throws failed_cond if p(x!i) is not int for all i.
+template <typename matrix_type>
+matrix_type* matrix_filter( pure_expr *p, pure_expr *x ) {
+  pure_ref(p);
+  matrix_type *xm = static_cast<matrix_type*>(x->data.mat.p);
+  typedef typename element_of<matrix_type>::type elem_type;
+
+  //the output matrix
+  matrix_type *o = create_matrix<matrix_type>(1,xm->size1*xm->size2);
+  size_t n; //the size of the output matrix
+  elem_type *po = o->data; //output write head
+  for (size_t i=0; i<xm->size1; ++i) {
+    elem_type *pi = xm->data+i*xm->tda; //input read head
+    for (size_t j=0; j<xm->size2; ++j,++pi) {
+      pure_expr *b = pure_app( p, to_expr(*pi) );
+      int32_t bi;
+      if (!pure_is_int(b,&bi)) goto exception;
+      if (bi) *(po++) = *pi;
+      pure_freenew(b);
+    }
+  }
+  n = po - o->data;
+
+  //compact the output matrix
+  if (n != xm->size1*xm->size2) {
+    matrix_type *o2 = create_matrix<matrix_type>(1,n);
+    memcpy(o2->data,o->data,n*sizeof(elem_type));
+    matrix_free(o);
+    o = o2;
+  }
+  pure_unref(p);
+  return o;
+
+  exception:
+    pure_unref(p);
+    matrix_free(o);
+    pure_throw( pure_symbol( 
+      interpreter::g_interp->symtab.failed_cond_sym().f ) );
+    return 0; 
+}
+
+
+} // namespace matrix
+
+
+extern "C" 
+pure_expr* matrix_map ( pure_expr *f, pure_expr *x )
+{
+  switch (x->tag) {
+    case EXPR::DMATRIX : return matrix::matrix_map<gsl_matrix>(f,x);
+    case EXPR::IMATRIX : return matrix::matrix_map<gsl_matrix_int>(f,x);
+    case EXPR::MATRIX  : return matrix::matrix_map<gsl_matrix_symbolic>(f,x);
+    //TODO complex matrices
+    default : return 0;
+  }
+}
+
+
+
+extern "C" 
+pure_expr* matrix_foldl ( pure_expr *f, pure_expr *z, pure_expr *x )
+{
+  switch (x->tag) {
+    case EXPR::DMATRIX : return matrix::matrix_foldl<gsl_matrix>(f,z,x);
+    case EXPR::IMATRIX : return matrix::matrix_foldl<gsl_matrix_int>(f,z,x);
+    case EXPR::MATRIX  : return matrix::matrix_foldl<gsl_matrix_symbolic>(f,z,x);
+    //TODO complex matrices
+    default : return 0;
+  }
+}
+
+
+extern "C" 
+pure_expr* matrix_foldr ( pure_expr *f, pure_expr *z, pure_expr *x )
+{
+  switch (x->tag) {
+    case EXPR::DMATRIX : return matrix::matrix_foldr<gsl_matrix>(f,z,x);
+    case EXPR::IMATRIX : return matrix::matrix_foldr<gsl_matrix_int>(f,z,x);
+    case EXPR::MATRIX  : return matrix::matrix_foldr<gsl_matrix_symbolic>(f,z,x);
+    //TODO complex matrices
+    default : return 0;
+  }
+}
+
+
+extern "C"
+pure_expr* matrix_filter ( pure_expr *p, pure_expr *x )
+{
+  switch ( x->tag ) {
+    case EXPR::DMATRIX : 
+      return pure_double_matrix( matrix::matrix_filter<gsl_matrix>(p,x) ); 
+    case EXPR::IMATRIX : 
+      return pure_int_matrix( matrix::matrix_filter<gsl_matrix_int>(p,x) ); 
+    case EXPR::MATRIX : 
+      return pure_symbolic_matrix( matrix::matrix_filter<gsl_matrix_symbolic>(p,x) ); 
+    //TODO complex matrices
+    default : return 0;
+  }
+}
+

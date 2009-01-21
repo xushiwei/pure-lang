@@ -473,3 +473,446 @@ y;
 {1,0,2,0,3,0;4,0,5,0,6,0}
 y==z;
 1
+{
+  rule #0: x = dmatrix {1,2,3;4,5,6}
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let x = dmatrix {1,2,3;4,5,6};
+{
+  rule #0: f = \a -> a
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let f = \a/*0:*/ -> a/*0:*/ {
+  rule #0: a = a
+  state 0: #0
+	<var> state 1
+  state 1: #0
+};
+{
+  rule #0: y = map f x
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let y = map f x;
+x;
+{1.0,2.0,3.0;4.0,5.0,6.0}
+y;
+{1.0,2.0,3.0;4.0,5.0,6.0}
+list y==map f (list x)&&dmatrixp y;
+1
+{
+  rule #0: f = \a -> int a
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let f = \a/*0:*/ -> int a/*0:*/ {
+  rule #0: a = int a
+  state 0: #0
+	<var> state 1
+  state 1: #0
+};
+{
+  rule #0: y = map f x
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let y = map f x;
+x;
+{1.0,2.0,3.0;4.0,5.0,6.0}
+y;
+{1,2,3;4,5,6}
+list y==map f (list x)&&imatrixp y;
+1
+{
+  rule #0: f = \a -> if a<2 then a else "a"
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let f = \a/*0:*/ -> if a/*0:*/<2 then a/*0:*/ else "a" {
+  rule #0: a = if a<2 then a else "a"
+  state 0: #0
+	<var> state 1
+  state 1: #0
+};
+{
+  rule #0: y = map f x
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let y = map f x;
+x;
+{1.0,2.0,3.0;4.0,5.0,6.0}
+y;
+{1.0,"a","a";"a","a","a"}
+list y==map f (list x)&&smatrixp y;
+1
+{
+  rule #0: f = \a -> if a>2 then a else "a"
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let f = \a/*0:*/ -> if a/*0:*/>2 then a/*0:*/ else "a" {
+  rule #0: a = if a>2 then a else "a"
+  state 0: #0
+	<var> state 1
+  state 1: #0
+};
+{
+  rule #0: y = map f x
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let y = map f x;
+x;
+{1.0,2.0,3.0;4.0,5.0,6.0}
+y;
+{"a","a",3.0;4.0,5.0,6.0}
+list y==map f (list x)&&smatrixp y;
+1
+{
+  rule #0: y = foldl (+) 0 x
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let y = foldl (+) 0 x;
+x;
+{1.0,2.0,3.0;4.0,5.0,6.0}
+y;
+21.0
+y==foldl (+) 0 (list x);
+1
+{
+  rule #0: y = foldr (+) 0 x
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let y = foldr (+) 0 x;
+x;
+{1.0,2.0,3.0;4.0,5.0,6.0}
+y;
+21.0
+y==foldr (+) 0 (list x);
+1
+{
+  rule #0: f = \a -> a<4
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let f = \a/*0:*/ -> a/*0:*/<4 {
+  rule #0: a = a<4
+  state 0: #0
+	<var> state 1
+  state 1: #0
+};
+{
+  rule #0: y = filter f x
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let y = filter f x;
+x;
+{1.0,2.0,3.0;4.0,5.0,6.0}
+y;
+{1.0,2.0,3.0}
+list y==filter f (list x);
+1
+{
+  rule #0: x = imatrix {1,2,3;4,5,6}
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let x = imatrix {1,2,3;4,5,6};
+{
+  rule #0: f = \a -> a
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let f = \a/*0:*/ -> a/*0:*/ {
+  rule #0: a = a
+  state 0: #0
+	<var> state 1
+  state 1: #0
+};
+{
+  rule #0: y = map f x
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let y = map f x;
+x;
+{1,2,3;4,5,6}
+y;
+{1,2,3;4,5,6}
+list y==map f (list x)&&imatrixp y;
+1
+{
+  rule #0: f = \a -> double a
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let f = \a/*0:*/ -> double a/*0:*/ {
+  rule #0: a = double a
+  state 0: #0
+	<var> state 1
+  state 1: #0
+};
+{
+  rule #0: y = map f x
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let y = map f x;
+x;
+{1,2,3;4,5,6}
+y;
+{1.0,2.0,3.0;4.0,5.0,6.0}
+list y==map f (list x)&&dmatrixp y;
+1
+{
+  rule #0: f = \a -> if a<2 then a else "a"
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let f = \a/*0:*/ -> if a/*0:*/<2 then a/*0:*/ else "a" {
+  rule #0: a = if a<2 then a else "a"
+  state 0: #0
+	<var> state 1
+  state 1: #0
+};
+{
+  rule #0: y = map f x
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let y = map f x;
+x;
+{1,2,3;4,5,6}
+y;
+{1,"a","a";"a","a","a"}
+list y==map f (list x)&&smatrixp y;
+1
+{
+  rule #0: f = \a -> if a>2 then a else "a"
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let f = \a/*0:*/ -> if a/*0:*/>2 then a/*0:*/ else "a" {
+  rule #0: a = if a>2 then a else "a"
+  state 0: #0
+	<var> state 1
+  state 1: #0
+};
+{
+  rule #0: y = map f x
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let y = map f x;
+x;
+{1,2,3;4,5,6}
+y;
+{"a","a",3;4,5,6}
+list y==map f (list x)&&smatrixp y;
+1
+{
+  rule #0: y = foldl (:) [] x
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let y = foldl (:) [] x;
+x;
+{1,2,3;4,5,6}
+y;
+((((([]:1):2):3):4):5):6
+y==foldl (:) [] (list x);
+1
+{
+  rule #0: y = foldr (:) [] x
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let y = foldr (:) [] x;
+x;
+{1,2,3;4,5,6}
+y;
+[1,2,3,4,5,6]
+y==foldr (:) [] (list x);
+1
+{
+  rule #0: f = \a -> a<4
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let f = \a/*0:*/ -> a/*0:*/<4 {
+  rule #0: a = a<4
+  state 0: #0
+	<var> state 1
+  state 1: #0
+};
+{
+  rule #0: y = filter f x
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let y = filter f x;
+x;
+{1,2,3;4,5,6}
+y;
+{1,2,3}
+list y==filter f (list x);
+1
+let x = {"1","2","3";"aa","bb","cc"};
+{
+  rule #0: f = \_ -> 1.0
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let f = \_/*0:*/ -> 1.0 {
+  rule #0: _ = 1.0
+  state 0: #0
+	<var> state 1
+  state 1: #0
+};
+{
+  rule #0: y = map f x
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let y = map f x;
+x;
+{"1","2","3";"aa","bb","cc"}
+y;
+{1.0,1.0,1.0;1.0,1.0,1.0}
+list y==map f (list x)&&dmatrixp y;
+1
+{
+  rule #0: f = \_ -> 1
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let f = \_/*0:*/ -> 1 {
+  rule #0: _ = 1
+  state 0: #0
+	<var> state 1
+  state 1: #0
+};
+{
+  rule #0: y = map f x
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let y = map f x;
+x;
+{"1","2","3";"aa","bb","cc"}
+y;
+{1,1,1;1,1,1}
+list y==map f (list x)&&imatrixp y;
+1
+{
+  rule #0: f = \a -> a
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let f = \a/*0:*/ -> a/*0:*/ {
+  rule #0: a = a
+  state 0: #0
+	<var> state 1
+  state 1: #0
+};
+{
+  rule #0: y = map f x
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let y = map f x;
+x;
+{"1","2","3";"aa","bb","cc"}
+y;
+{"1","2","3";"aa","bb","cc"}
+list y==map f (list x)&&smatrixp y;
+1
+{
+  rule #0: y = foldl (+) "0" x
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let y = foldl (+) "0" x;
+x;
+{"1","2","3";"aa","bb","cc"}
+y;
+"0123aabbcc"
+y==foldl (+) "0" (list x);
+1
+{
+  rule #0: y = foldr (+) "0" x
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let y = foldr (+) "0" x;
+x;
+{"1","2","3";"aa","bb","cc"}
+y;
+"123aabbcc0"
+y==foldr (+) "0" (list x);
+1
+{
+  rule #0: f = \a -> #a==1
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let f = \a/*0:*/ -> #a/*0:*/==1 {
+  rule #0: a = #a==1
+  state 0: #0
+	<var> state 1
+  state 1: #0
+};
+{
+  rule #0: y = filter f x
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let y = filter f x;
+x;
+{"1","2","3";"aa","bb","cc"}
+y;
+{"1","2","3"}
+list y==filter f (list x);
+1
