@@ -7238,10 +7238,7 @@ symbolic_map_loop
   outp = out->data+lasti*out->tda+lastj;
   //finish the map
   for (size_t j=lastj; j<in->size2; ++j,++inp,++outp) {
-    pure_expr *t = to_expr(*inp);  
-    pure_ref(t);
-    *outp = pure_app(f,t);
-    pure_unref(t);
+    *outp = pure_app(f,to_expr(*inp));
   }
 
   for (size_t i=lasti+1; i<in->size1; ++i) {
