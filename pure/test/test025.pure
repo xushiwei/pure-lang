@@ -160,6 +160,9 @@ let f = \a -> a < 4;
 let y = filter f x;
 x; y; list y == filter f (list x);
 
+let f = \i j -> i+j+1.0;
+let y = scanl f 0.0 x;
+x; y; list y == scanl f 0.0 (list x);
 
 
 
@@ -191,6 +194,9 @@ let f = \a -> a < 4;
 let y = filter f x;
 x; y; list y == filter f (list x);
 
+let f = \i j -> i+j+1;
+let y = scanl f 0 x;
+x; y; list y == scanl f 0 (list x);
 
 
 
@@ -218,3 +224,5 @@ let f = \a -> #a == 1;
 let y = filter f x;
 x; y; list y == filter f (list x);
 
+let y = scanl (+) "" x;
+x; y; list y == scanl (+) "" (list x);
