@@ -7533,7 +7533,7 @@ pure_expr* matrix_foldl( pure_expr *f, pure_expr *z, pure_expr *x )
     for (size_t j=0; j<xm->size2; ++j,++p) {
       pure_expr *zz = pure_new(z);
       z = pure_appl( f, 2, z, to_expr(*p)  );
-      pure_unref(zz);
+      pure_free(zz);
     }
   }
   pure_unref(f);
@@ -7556,7 +7556,7 @@ pure_expr* matrix_foldr( pure_expr *f, pure_expr *z, pure_expr *x )
     for (ptrdiff_t j=xm->size2-1; j>=0; --j,--p) {
       pure_expr *zz = pure_new(z);
       z = pure_appl( f, 2, to_expr(*p), z  );
-      pure_unref(zz);
+      pure_free(zz);
     }
   }
   pure_unref(f);
