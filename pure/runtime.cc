@@ -7391,7 +7391,7 @@ symbolic_scanl_loop
   typedef typename element_of<num_mat_type>::type num_elem_type;
 
   in_elem_type *inp = 0;
-  pure_expr **outp = out->data;
+  pure_expr **outp = out->data + (lastj<0?0:1);
   num_elem_type *nump = num ? num->data : 0;
 
   //copy the already-evaluated stuff out of num
@@ -7399,6 +7399,7 @@ symbolic_scanl_loop
     assert(num);
     if (lasti>0) {
       for (size_t i=0; i<lasti; ++i) {
+        nump = num->data + i*num->tda;
         for (size_t j=0; j<in->size2; ++j) {
           *(outp++) = to_expr(*(nump++)) ;
         }
