@@ -662,6 +662,36 @@ y;
 list y==scanl f 0.0 (list x);
 1
 {
+  rule #0: f = \i -> \j -> if doublep i then str (i+j) else 1.0
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let f = \i/*0:*/ -> \j/*0:*/ -> if doublep i/*1:*/ then str (i/*1:*/+j/*0:*/) else 1.0 {
+  rule #0: j = if doublep i then str (i+j) else 1.0
+  state 0: #0
+	<var> state 1
+  state 1: #0
+} {
+  rule #0: i = \j -> if doublep i then str (i+j) else 1.0
+  state 0: #0
+	<var> state 1
+  state 1: #0
+};
+{
+  rule #0: y = scanl f 0.0 x
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let y = scanl f 0.0 x;
+x;
+{1.0,2.0,3.0;4.0,5.0,6.0}
+y;
+{0.0,"1.0",1.0,"4.0",1.0,"6.0",1.0}
+list y==scanl f 0.0 (list x);
+1
+{
   rule #0: x = imatrix {1,2,3;4,5,6}
   state 0: #0
 	<var> state 1
