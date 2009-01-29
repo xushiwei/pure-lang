@@ -1,3 +1,66 @@
+2009-01-29  Albert Graef  <Dr.Graef@t-online.de>
+
+	* runtime.cc/h, lib/system.pure: Overhaul of time functions to
+	make them more POSIXish. Note that localtime and gmtime now return
+	broken-down time as a pointer which can then be passed to asctime
+	or strftime to format it as a string, or to int_matrix 9 if you
+	want to have the data as a matrix. Also updated Libor Spacek's
+	date.pure example accordingly.
+
+2009-01-28  Albert Graef  <Dr.Graef@t-online.de>
+
+	* configure.ac: Bump version number. (Needs reconfigure.)
+
+	* runtime.cc: Fix a severe performance issue with mass updates of
+	reference counts, which affected, in particular, the creation of
+	symbolic matrices. Reported by Scott E. Dillard.
+
+2009-01-26  Albert Graef  <Dr.Graef@t-online.de>
+
+	* runtime.cc/h, lib/matrices.pure: Added direct list->rowvector
+	conversions to the dmatrix, imatrix, cmatrix and smatrix
+	functions. These are typically much faster than the generic
+	'matrix' routine, but require that the list elements are already
+	of the appropriate types.
+
+2009-01-25  Albert Graef  <Dr.Graef@t-online.de>
+
+	* runtime.cc (pure_sys_vars): For convenience, move the definition
+	of the SIZEOF constants to interpreter::init_sys_vars, so that
+	they are always defined, without loading the system module.
+
+	* runtime.cc/h, lib/matrices.pure: Added numeric-symbolic matrix
+	conversions (smatrix et al).
+
+	* lib/system.pure: Bugfix: Memory allocation functions take size_t
+	arguments, not int.
+
+2009-01-24  Albert Graef  <Dr.Graef@t-online.de>
+
+	* runtime.cc (pure_is_tuplev): Bugfix: Return zero elements for
+	the empty tuple.
+
+2009-01-23  Albert Graef  <Dr.Graef@t-online.de>
+
+	* configure.ac, Makefile.in: Windows/Mingw only: Invoke diff with
+	--strip-trailing-cr to make 'make check' work. Previously these
+	tests would fail when using the svn sources because of lf/cr-lf
+	discrepancies. NOTE: This requires MSYS 1.0.11 or later since
+	earlier versions ship an older diff utility which doesn't have the
+	--strip-trailing-cr option. If you're still running MSYS 1.0.10,
+	you can download a separate package with the 1.0.11 diffutils from
+	http://sf.net/project/showfiles.php?group_id=2435&package_id=24963.
+
+	* configure.ac: Avoid overriding user-defined CPPFLAGS (reported
+	by Ryan Schmidt), minor fixes for compatibility with autoconf 2.63.
+
+	* examples/transitive.pure: Added Vili Aapro's infinite transitive
+	closure example.
+
+2009-01-22  Albert Graef  <Dr.Graef@t-online.de>
+
+	* interpreter.cc (CreateRet): Fix compile problems with LLVM 2.3.
+
 2009-01-20  Albert Graef  <Dr.Graef@t-online.de>
 
 	* runtime.cc/h, lib/primitives.pure: Add addr function to get the

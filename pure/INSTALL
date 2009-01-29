@@ -10,12 +10,13 @@ of this file details the tweaks necessary to make Pure compile and run on
 various other platforms. More information about installing LLVM and the
 required LLVM source packages can be found at http://llvm.org.
 
-Pure is known to work on Linux, Mac OSX and MS Windows, and should compile
-(with the usual amount of tweaking) on all recent UNIX/POSIX-based platforms.
-We recommend using version 4.x of the GNU C++ compiler; it should be available
-almost everywhere (in fact, since you'll need LLVM anyway, you can also use
-the gcc frontend available for LLVM). You'll also need a Bourne-compatible
-shell and GNU make, which are also readily available on most platforms.
+Pure is known to work on Linux, NetBSD, Mac OSX, and MS Windows, and should
+compile (with the usual amount of tweaking) on all recent UNIX/POSIX-based
+platforms. We recommend using version 4.x of the GNU C++ compiler; it should
+be available almost everywhere (in fact, since you'll need LLVM anyway, you
+can also use the gcc frontend available for LLVM). You'll also need a Bourne-
+compatible shell and GNU make, which are also readily available on most
+platforms.
 
 A binary package in msi format is provided for Windows users in the download
 area of the pure-lang.googlecode.com project page. Ports and packages for
@@ -146,11 +147,13 @@ that case please zip up the entire test directory and mail it to the author or
 the Pure mailing list. Also include precise information about the Pure version
 or svn revision number you're running.
 
-Note that under MS Windows this step is expected to fail on some math-related
-tests such as test020.pure which stress-test the system's math routines,
-because some of these are broken in Microsoft's C library. Also, test025.pure
-will always fail if you built Pure without GSL support; take this as a
-reminder that you need GSL to enjoy full matrix support in Pure.
+Please note that MSYS 1.0.11 (or at least the diffutils package from that
+version) is required to make 'make check' work on Windows. Also note that
+under MS Windows this step is expected to fail on some math-related tests such
+as test020.pure which stress-test the system's math routines, because some of
+these are broken in Microsoft's C library. Moreover, test025.pure will always
+fail if you built Pure without GSL support; take this as a reminder that you
+need GSL to enjoy full matrix support in Pure.
 
 STEP 6. The Pure interpreter should be ready to go now.
 
@@ -252,9 +255,13 @@ specifying the desired installation prefix with the --prefix option, e.g.:
 
 $ ./configure --prefix=/usr
 
-(Note that if you install Pure into a non-standard location, you may have to
+Note that if you install Pure into a non-standard location, you may have to
 set LD_LIBRARY_PATH or a similar variable so that the dynamic linker finds the
-Pure runtime library, libpure.so.)
+Pure runtime library, libpure.so. Also, when compiling and linking addon
+modules you might have to set C_INCLUDE_PATH and LIBRARY_PATH (or similar) so
+that the header and library of the runtime library is found. On some systems
+(notably, *BSD) this is even necessary with the default prefix, because
+/usr/local is not in the default search paths.
 
 In addition, the DESTDIR variable enables package maintainers to install Pure
 into a special "staging" directory, so that installed files can be packaged
@@ -312,7 +319,10 @@ PREDEFINED BUILD TYPES
 ---------- ----- -----
 
 For convenience, 'configure' provides some options to set up CPPFLAGS and
-CXXFLAGS for various build types.
+CXXFLAGS for various build types. Please note that most of these options
+assume gcc right now, so if you use another compiler you'll probably have to
+set up compilation flags manually by using the variables described in the
+previous section instead.
 
 Note that, as of Pure 0.3, the default build already includes most
 optimizations (-O2). This build should be ok for most purposes, and has the
@@ -370,6 +380,12 @@ have to set CPPFLAGS and LDFLAGS accordingly and/or use --enable-gsl to
 forcibly enable GSL support. You can also specify --disable-gsl if you don't
 want/need the GSL matrices, but this isn't recommended.
 
+In general, the build options can be combined freely with the variables
+described in the previous section, but note that --enable-release and
+--enable-debug will always overwrite the value of CXXFLAGS. If this is a
+problem then it is best to just set up the required flags manually using the
+variables described in the previous section.
+
 RUNNING PURE FROM THE SOURCE DIRECTORY
 ------- ---- ---- --- ------ ---------
 
@@ -409,7 +425,7 @@ installation to verify that your tarball contains all needed bits and pieces).
 
 Last but not least, if you modify configure.ac for some reason then you can
 regenerate the configure script and config.h.in with 'make config'. This needs
-autoconf, of course. (The distribution was prepared using autoconf 2.61.)
+autoconf, of course. (The distribution was prepared using autoconf 2.63.)
 
 
 SYSTEM NOTES
@@ -471,8 +487,9 @@ please let us know if you want to help with that.
 MAC OSX
 --- ---
 
-Pure works fine on OSX, and a port by Ryan Schmidt exists in the MacPorts
-collection, see http://www.macports.org/.
+Pure works fine on OSX/Intel, and a port by Ryan Schmidt exists in the
+MacPorts collection, see http://www.macports.org/. The current version of the
+interpreter does not appear to work with OSX/PPC; this is being worked on.
 
 Note that with at least some versions of the Apple gcc compiler, with all
 warnings turned on you'll get the (bogus) warning "control reaches end of
@@ -480,6 +497,27 @@ non-void function" a couple of times in interpreter.cc. These are due to a bug
 in older gcc versions (see http://gcc.gnu.org/bugzilla/show_bug.cgi?id=16558),
 but they are harmless and can be ignored. These warnings should also go away
 once Apple upgrades its SDK to a newer gcc version.
+
+FREEBSD
+-------
+
+Currently only the statically compiled version of the interpreter
+(--disabled-shared) is known to work. Linking LLVM into the shared runtime
+library on FreeBSD 7.0 seems to cause undefined behaviour (failed assertions
+in LLVM). If anyone can help resolving this issue, please let us know.
+
+NETBSD
+------
+
+To install, do the usual pkg_add routine to install *updated* versions of
+subversion, gmake, perl5, flex, bison, readline, gmp, and gsl. Then, download
+llvm-2.4.tar.gz and do the usual './configure [flags]', 'gmake', and
+'gmake install' (*Notice*, use 'gmake' and not 'make' since they are different
+on *BSD systems). Pull the source files through svn, then, do the
+'./configure CPPFLAGS=-I/usr/pkg/include LDFLAGS=-L/usr/pkg/lib', 'gmake', and
+'gmake install' routine. Remember that NetBSD folks recommend not putting stuff
+in ld.so.conf, so put 'export LD_LIBRARY_PATH=/usr/pkg/lib:/usr/local/lib'
+in your shell startup script.
 
 MS WINDOWS
 -- -------
