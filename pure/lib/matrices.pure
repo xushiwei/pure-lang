@@ -346,6 +346,7 @@ extern expr* matrix_foldl(expr*,expr*,expr*);
 extern expr* matrix_foldr(expr*,expr*,expr*);
 extern expr* matrix_map(expr*,expr*);
 extern expr* matrix_scanl(expr*,expr*,expr*);
+extern expr* matrix_scanr(expr*,expr*,expr*);
 
 cycle x::matrix		= cycle (list x);
 cyclen n::int x::matrix	= cyclen n (list x) if ~null x;
@@ -371,7 +372,8 @@ map f x::matrix	        = redim(dim x) $ colcat(map f (list x)) if cmatrixp x;
 scanl f a x::matrix	= colcat (scanl f a (list x)) if cmatrixp x;
                         = matrix_scanl f a x;
 scanl1 f x::matrix	= colcat (scanl1 f (list x));
-scanr f a x::matrix	= colcat (scanr f a (list x));
+scanr f a x::matrix	= colcat (scanr f a (list x)) if cmatrixp x;
+                        = matrix_scanr f a x;
 scanr1 f x::matrix	= colcat (scanr1 f (list x));
 take k::int x::matrix	= x!!(0..k-1);
 takewhile p x::matrix	= colcat (takewhile p (list x));

@@ -10,6 +10,10 @@ ifeq ($(strip $(prefix)),)
 prefix = /usr/local
 endif
 
+# Installation goes into $(libdir)/pure, you can also set this directly
+# instead of $(prefix).
+libdir = $(prefix)/lib
+
 # Try to guess the host system type.
 host = $(shell ./config.guess)
 
@@ -33,22 +37,32 @@ ifneq "$(findstring x86_64-,$(host))" ""
 PIC = -fPIC
 endif
 
+# Default CFLAGS are -g -O2, CPPFLAGS, LDFLAGS and LIBS are empty by default.
+# These can be set from the command line as usual. Use CFLAGS, CPPFLAGS and
+# LDFLAGS for compiler (-O etc.), preprocessor (-I etc.) and linker (-L etc.) 
+# options, respectively. LIBS is to be used for additional libraries to be
+# linked (-l etc.).
+
+CFLAGS = -g -O2
+
+FLAGS = $(CPPFLAGS) $(CFLAGS) $(PIC) $(LDFLAGS)
+
 DISTFILES = COPYING Makefile README config.guess examples/*.pure gsl.c gsl.pure
 
 all: gsl$(DLL)
 
 gsl$(DLL): gsl.c
-	gcc $(shared) -o $@ $< $(PIC) -lgsl -lgslcblas -lm -lpure
+	gcc $(shared) -o $@ $< $(FLAGS) -lgsl -lgslcblas -lm -lpure $(LIBS)
 
 clean:
 	rm -f *$(DLL) *~ *.a *.o
 
 install:
-	test -d "$(DESTDIR)$(prefix)/lib/pure" || mkdir -p "$(DESTDIR)$(prefix)/lib/pure"
-	cp gsl.pure gsl$(DLL) "$(DESTDIR)$(prefix)/lib/pure"
+	test -d "$(DESTDIR)$(libdir)/pure" || mkdir -p "$(DESTDIR)$(libdir)/pure"
+	cp gsl.pure gsl$(DLL) "$(DESTDIR)$(libdir)/pure"
 
 uninstall:
-	rm -f "$(DESTDIR)$(prefix)/lib/pure/gsl.pure" "$(DESTDIR)$(prefix)/lib/pure/gsl$(DLL)"
+	rm -f "$(DESTDIR)$(libdir)/pure/gsl.pure" "$(DESTDIR)$(libdir)/pure/gsl$(DLL)"
 
 dist:
 	rm -rf $(dist)

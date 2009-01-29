@@ -784,6 +784,66 @@ y;
 list y==scanl f 0.0 (list x);
 1
 {
+  rule #0: f = \i -> \j -> i+j+1.0
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let f = \i/*0:*/ -> \j/*0:*/ -> i/*1:*/+j/*0:*/+1.0 {
+  rule #0: j = i+j+1.0
+  state 0: #0
+	<var> state 1
+  state 1: #0
+} {
+  rule #0: i = \j -> i+j+1.0
+  state 0: #0
+	<var> state 1
+  state 1: #0
+};
+{
+  rule #0: y = scanr f 0.0 x
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let y = scanr f 0.0 x;
+x;
+{1.0,2.0,3.0;4.0,5.0,6.0}
+y;
+{27.0,25.0,22.0,18.0,13.0,7.0,0.0}
+list y==scanr f 0.0 (list x);
+1
+{
+  rule #0: f = \i -> \j -> if doublep j then str (i+j) else 1.0
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let f = \i/*0:*/ -> \j/*0:*/ -> if doublep j/*0:*/ then str (i/*1:*/+j/*0:*/) else 1.0 {
+  rule #0: j = if doublep j then str (i+j) else 1.0
+  state 0: #0
+	<var> state 1
+  state 1: #0
+} {
+  rule #0: i = \j -> if doublep j then str (i+j) else 1.0
+  state 0: #0
+	<var> state 1
+  state 1: #0
+};
+{
+  rule #0: y = scanr f 0.0 x
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let y = scanr f 0.0 x;
+x;
+{1.0,2.0,3.0;4.0,5.0,6.0}
+y;
+{1.0,"3.0",1.0,"5.0",1.0,"6.0",0.0}
+list y==scanr f 0.0 (list x);
+1
+{
   rule #0: x = imatrix {1,2,3;4,5,6}
   state 0: #0
 	<var> state 1
@@ -971,6 +1031,66 @@ y;
 {0,2,5,9,14,20,27}
 list y==scanl f 0 (list x);
 1
+{
+  rule #0: f = \i -> \j -> i+j+1
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let f = \i/*0:*/ -> \j/*0:*/ -> i/*1:*/+j/*0:*/+1 {
+  rule #0: j = i+j+1
+  state 0: #0
+	<var> state 1
+  state 1: #0
+} {
+  rule #0: i = \j -> i+j+1
+  state 0: #0
+	<var> state 1
+  state 1: #0
+};
+{
+  rule #0: y = scanl f 0 x
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let y = scanl f 0 x;
+x;
+{1,2,3;4,5,6}
+y;
+{0,2,5,9,14,20,27}
+list y==scanl f 0 (list x);
+1
+{
+  rule #0: f = \i -> \j -> i+j+1
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let f = \i/*0:*/ -> \j/*0:*/ -> i/*1:*/+j/*0:*/+1 {
+  rule #0: j = i+j+1
+  state 0: #0
+	<var> state 1
+  state 1: #0
+} {
+  rule #0: i = \j -> i+j+1
+  state 0: #0
+	<var> state 1
+  state 1: #0
+};
+{
+  rule #0: y = scanr f 0 x
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let y = scanr f 0 x;
+x;
+{1,2,3;4,5,6}
+y;
+{27,25,22,18,13,7,0}
+list y==scanr f 0 (list x);
+1
 let x = {"1","2","3";"aa","bb","cc"};
 {
   rule #0: f = \_ -> 1.0
@@ -1110,4 +1230,17 @@ x;
 y;
 {"","1","12","123","123aa","123aabb","123aabbcc"}
 list y==scanl (+) "" (list x);
+1
+{
+  rule #0: y = scanr (+) "" x
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+let y = scanr (+) "" x;
+x;
+{"1","2","3";"aa","bb","cc"}
+y;
+{"123aabbcc","23aabbcc","3aabbcc","aabbcc","bbcc","cc",""}
+list y==scanr (+) "" (list x);
 1
