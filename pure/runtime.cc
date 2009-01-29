@@ -323,6 +323,103 @@ pure_expr *pure_new_internal(pure_expr *x)
   return x;
 }
 
+/* Mass updates of refcounts. We need to optimize this case to avoid quadratic
+   complexity due to repeated searches of the tmps list. This prevents some
+   serious performance issues, in particular in symbolic matrix primitives.
+   Thanks to Scott E. Dillard for pointing this out. */
+
+/* To make this fast, we currently employ a rather simple heuristic which only
+   optimizes the most common cases (however, these seem to hold in most
+   primitives where it matters):
+
+   - The vector elements have a nonzero reference count already (as determined
+     by looking at the first element). In this case updates don't refer to the
+     tmps list and will be fast anyway (no optimization needed).
+
+   - The *last* vector element is near the beginning of the tmps list (as
+     determined by looking at the first three elements of the tmps list).
+     This indicates that the elements have been created in order and should
+     be updated in reverse.
+
+   - The *first* vector element is near the beginning of the tmps list (as
+     determined by looking at the first three elements of the tmps list).
+     This indicates that the elements have been created in reverse and should
+     be updated in order.
+
+   If a primitive falls outside this scheme then it may still suffer from
+   quadratic complexity. In such a case it is best if you create the elements
+   with a nonzero reference count instead, and decrement them later. */
+
+static inline short peek(pure_expr *const tmps,
+			 pure_expr *const first, pure_expr *const last)
+{
+  pure_expr *t = tmps;
+  short count = 0;
+  while (t && count < 3)
+    if (t == last)
+      return -1;
+    else if (t == first)
+      return 1;
+    else {
+      t = t->xp; count++;
+    }
+  return 0;
+}
+
+static inline void pure_new_vect(const size_t n, pure_expr **xs)
+{
+  short rc;
+  if (n == 0)
+    return;
+  else if (xs[0]->refc > 0)
+    rc = 0;
+  else {
+    interpreter& interp = *interpreter::g_interp;
+    pure_expr *tmps = interp.tmps;
+    pure_expr *first = xs[0], *last = xs[n-1];
+    rc = peek(tmps, first, last);
+  }
+  if (rc <= 0)
+    for (size_t i = n; i > 0; )
+      pure_new_internal(xs[--i]);
+  else
+    for (size_t i = 0; i < n; i++)
+      pure_new_internal(xs[i]);
+}
+
+/* Also handle the case of non-contiguous expression vectors which might arise
+   in symbolic matrix operations. */
+
+static inline void pure_new_vect2(const size_t n, const size_t m,
+				  const size_t stride, pure_expr **xs)
+{
+  if (stride == m)
+    pure_new_vect(n*m, xs);
+  short rc;
+  if (n == 0 || m == 0)
+    return;
+  else if (xs[0]->refc > 0)
+    rc = 0;
+  else {
+    interpreter& interp = *interpreter::g_interp;
+    pure_expr *tmps = interp.tmps;
+    pure_expr *first = xs[0], *last = xs[(n-1)*stride+m-1];
+    rc = peek(tmps, first, last);
+  }
+  if (rc <= 0)
+    for (size_t i = n; i > 0; ) {
+      const size_t k = (--i)*stride;
+      for (size_t j = m; j > 0; )
+	pure_new_internal(xs[k+(--j)]);
+    }
+  else
+    for (size_t i = 0; i < n; i++) {
+      const size_t k = i*stride;
+      for (size_t j = 0; j < m; j++)
+	pure_new_internal(xs[k+j]);
+    }
+}
+
 static void pure_free_clos(pure_expr *x)
 {
 #if DEBUG>3
@@ -596,7 +693,7 @@ pure_expr *pure_symbol(int32_t tag)
       (interp.ExprPtrTy, false, llvm::GlobalVariable::InternalLinkage, 0,
        lab.c_str(), interp.module);
     interp.JIT->addGlobalMapping(v.v, &v.x);
-    v.x = pure_new(pure_const(tag));
+    v.x = pure_new_internal(pure_const(tag));
     // Since we just created this variable, it doesn't have any closure bound
     // to it yet, so it's safe to just return the symbol as is.
     return v.x;
@@ -769,10 +866,8 @@ pure_expr *pure_symbolic_matrix(void *p)
   x->tag = EXPR::MATRIX;
   x->data.mat.p = p;
   // count references
-  const size_t k = m->size1, l = m->size2, tda = m->tda;;
-  for (size_t i = 0; i < k; i++)
-    for (size_t j = 0; j < l; j++)
-      pure_new_internal(m->data[i*tda+j]);
+  const size_t k = m->size1, l = m->size2, tda = m->tda;
+  pure_new_vect2(k, l, tda, m->data);
   x->data.mat.refc = new uint32_t;
   *x->data.mat.refc = 1;
   MEMDEBUG_NEW(x)
@@ -978,9 +1073,9 @@ double_matrix_rows(size_t nrows, size_t ncols, size_t n, pure_expr **xs)
   if (!mat) return 0;
   double *data = mat->data;
   size_t tda = mat->tda;
+  pure_new_vect(n, xs);
   for (size_t count = 0, i = 0; count < n; count++) {
     pure_expr *x = xs[count];
-    pure_new_internal(x);
     switch (x->tag) {
     case EXPR::INT:
       data[i++*tda] = (double)x->data.i;
@@ -1027,9 +1122,9 @@ double_matrix_columns(size_t nrows, size_t ncols, size_t n, pure_expr **xs)
   if (!mat) return 0;
   double *data = mat->data;
   size_t tda = mat->tda;
+  pure_new_vect(n, xs);
   for (size_t count = 0, i = 0; count < n; count++) {
     pure_expr *x = xs[count];
-    pure_new_internal(x);
     switch (x->tag) {
     case EXPR::INT:
       data[i++] = (double)x->data.i;
@@ -1079,9 +1174,9 @@ complex_matrix_rows(size_t nrows, size_t ncols, size_t n, pure_expr **xs)
   if (!mat) return 0;
   double *data = mat->data;
   size_t tda = mat->tda;
+  pure_new_vect(n, xs);
   for (size_t count = 0, i = 0; count < n; count++) {
     pure_expr *x = xs[count];
-    pure_new_internal(x);
     switch (x->tag) {
     case EXPR::INT:
       data[2*i*tda] = (double)x->data.i;
@@ -1157,9 +1252,9 @@ complex_matrix_columns(size_t nrows, size_t ncols, size_t n, pure_expr **xs)
   if (!mat) return 0;
   double *data = mat->data;
   size_t tda = mat->tda;
+  pure_new_vect(n, xs);
   for (size_t count = 0, i = 0; count < n; count++) {
     pure_expr *x = xs[count];
-    pure_new_internal(x);
     switch (x->tag) {
     case EXPR::INT:
       data[2*i] = (double)x->data.i;
@@ -1238,9 +1333,9 @@ int_matrix_rows(size_t nrows, size_t ncols, size_t n, pure_expr **xs)
   if (!mat) return 0;
   int *data = mat->data;
   size_t tda = mat->tda;
+  pure_new_vect(n, xs);
   for (size_t count = 0, i = 0; count < n; count++) {
     pure_expr *x = xs[count];
-    pure_new_internal(x);
     switch (x->tag) {
     case EXPR::INT:
       data[i++*tda] = x->data.i;
@@ -1287,9 +1382,9 @@ int_matrix_columns(size_t nrows, size_t ncols, size_t n, pure_expr **xs)
   if (!mat) return 0;
   int *data = mat->data;
   size_t tda = mat->tda;
+  pure_new_vect(n, xs);
   for (size_t count = 0, i = 0; count < n; count++) {
     pure_expr *x = xs[count];
-    pure_new_internal(x);
     switch (x->tag) {
     case EXPR::INT:
       data[i++] = x->data.i;
@@ -1340,9 +1435,9 @@ symbolic_matrix_rows(size_t nrows, size_t ncols, size_t n, pure_expr **xs)
   if (!mat) return 0;
   pure_expr **data = mat->data;
   size_t tda = mat->tda;
+  pure_new_vect(n, xs);
   for (size_t count = 0, i = 0; count < n; count++) {
     pure_expr *x = xs[count];
-    pure_new_internal(x);
     switch (x->tag) {
     case EXPR::MATRIX: {
       gsl_matrix_symbolic *mat1 = (gsl_matrix_symbolic*)x->data.mat.p;
@@ -1401,9 +1496,9 @@ symbolic_matrix_columns(size_t nrows, size_t ncols, size_t n, pure_expr **xs)
   if (!mat) return 0;
   pure_expr **data = mat->data;
   size_t tda = mat->tda;
+  pure_new_vect(n, xs);
   for (size_t count = 0, i = 0; count < n; count++) {
     pure_expr *x = xs[count];
-    pure_new_internal(x);
     switch (x->tag) {
     case EXPR::MATRIX: {
       gsl_matrix_symbolic *mat1 = (gsl_matrix_symbolic*)x->data.mat.p;
@@ -2038,6 +2133,11 @@ bool pure_is_tuplev(pure_expr *x, size_t *_size, pure_expr ***_elems)
      adapted accordingly. */
   pure_expr *u = x, *y, *z;
   size_t size = 1;
+  if (is_void(x)) {
+    if (_size) *_size = 0;
+    if (_elems) *_elems = 0;
+    return true;
+  }
   while (is_pair(u, y, z)) {
     size++;
     u = z;
@@ -2761,8 +2861,7 @@ pure_expr *pure_matrix_rows(uint32_t n, ...)
   /* This is called without a shadow stack frame, so we do our own cleanup
      here to avoid having temporaries hanging around indefinitely. */
   if (x) x->refc++;
-  for (size_t i = 0; i < n; i++)
-    pure_new_internal(xs[i]);
+  pure_new_vect(n, xs);
   for (size_t i = 0; i < n; i++)
     pure_free_internal(xs[i]);
   pure_unref_internal(x);
@@ -2883,8 +2982,7 @@ pure_expr *pure_matrix_columns(uint32_t n, ...)
   /* This is called without a shadow stack frame, so we do our own cleanup
      here to avoid having temporaries hanging around indefinitely. */
   if (x) x->refc++;
-  for (size_t i = 0; i < n; i++)
-    pure_new_internal(xs[i]);
+  pure_new_vect(n, xs);
   for (size_t i = 0; i < n; i++)
     pure_free_internal(xs[i]);
   pure_unref_internal(x);
@@ -3380,16 +3478,23 @@ uint32_t pure_push_args(uint32_t n, uint32_t m, ...)
   pure_expr **sstk = interp.sstk; uint32_t env = (m>0)?sz+n+1:0;
   // mark the beginning of this frame
   sstk[sz++] = 0;
+  pure_expr **frame = sstk+sz;
+  const uint32_t k = n+m;
   va_start(ap, m);
-  for (size_t i = 0; i < n+m; i++) {
+  for (uint32_t i = 0; i < k; i++) {
     pure_expr *x = va_arg(ap, pure_expr*);
     sstk[sz++] = x;
+  };
+  va_end(ap);
+  /* The reference counts are updated in reverse which is faster in the common
+     case that temporary arguments have been generated in order. */
+  for (uint32_t i = k; i > 0; ) {
+    pure_expr *x = frame[--i];
     if (x->refc > 0)
       x->refc++;
     else
       pure_new_internal(x);
-  };
-  va_end(ap);
+  }
 #if SSTK_DEBUG
   cerr << "++ stack: (sz = " << sz << ")\n";
   for (size_t i = 0; i < sz; i++) {
@@ -5147,7 +5252,7 @@ pure_expr *matrix_transpose(pure_expr *x)
     gsl_matrix_symbolic *m2 = create_symbolic_matrix(m, n);
     for (size_t i = 0; i < n; i++)
       for (size_t j = 0; j < m; j++)
-	m2->data[j*m2->tda+i] = pure_new_internal(m1->data[i*m1->tda+j]);
+	m2->data[j*m2->tda+i] = m1->data[i*m1->tda+j];
     return pure_symbolic_matrix(m2);
   }
 #ifdef HAVE_GSL
@@ -5192,6 +5297,19 @@ pure_expr *matrix_double(pure_expr *x)
 {
 #ifdef HAVE_GSL
   switch (x->tag) {
+  case EXPR::MATRIX: {
+    gsl_matrix_symbolic *m1 = (gsl_matrix_symbolic*)x->data.mat.p;
+    size_t n = m1->size1, m = m1->size2;
+    for (size_t i = 0; i < n; i++)
+      for (size_t j = 0; j < m; j++)
+	if (m1->data[i*m1->tda+j]->tag != EXPR::DBL)
+	  return 0;
+    gsl_matrix *m2 = create_double_matrix(n, m);
+    for (size_t i = 0; i < n; i++)
+      for (size_t j = 0; j < m; j++)
+	m2->data[i*m2->tda+j] = m1->data[i*m1->tda+j]->data.d;
+    return pure_double_matrix(m2);
+  }
   case EXPR::DMATRIX:
     return x;
   case EXPR::IMATRIX: {
@@ -5216,8 +5334,23 @@ pure_expr *matrix_double(pure_expr *x)
       }
     return pure_double_matrix(m2);
   }
-  default:
-    return 0;
+  default: {
+    size_t n;
+    pure_expr **xs;
+    if (pure_is_listv(x, &n, &xs)) {
+      for (size_t i = 0; i < n; i++)
+	if (xs[i]->tag != EXPR::DBL) {
+	  free(xs);
+	  return 0;
+	}
+      gsl_matrix *m2 = create_double_matrix(1, n);
+      for (size_t i = 0; i < n; i++)
+	m2->data[i] = xs[i]->data.d;
+      if (xs) free(xs);
+      return pure_double_matrix(m2);
+    } else
+      return 0;
+  }
   }
 #else
   return 0;
@@ -5229,6 +5362,24 @@ pure_expr *matrix_complex(pure_expr *x)
 {
 #ifdef HAVE_GSL
   switch (x->tag) {
+  case EXPR::MATRIX: {
+    gsl_matrix_symbolic *m1 = (gsl_matrix_symbolic*)x->data.mat.p;
+    size_t n = m1->size1, m = m1->size2;
+    for (size_t i = 0; i < n; i++)
+      for (size_t j = 0; j < m; j++)
+	if (!is_complex(m1->data[i*m1->tda+j]))
+	  return 0;
+    gsl_matrix_complex *m2 = create_complex_matrix(n, m);
+    double a = 0.0, b = 0.0;
+    for (size_t i = 0; i < n; i++)
+      for (size_t j = 0; j < m; j++) {
+	size_t k = 2*(i*m2->tda+j);
+	get_complex(m1->data[i*m1->tda+j], a, b);
+	m2->data[k] = a;
+	m2->data[k+1] = b;
+      }
+    return pure_complex_matrix(m2);
+  }
   case EXPR::DMATRIX: {
     gsl_matrix *m1 = (gsl_matrix*)x->data.mat.p;
     size_t n = m1->size1, m = m1->size2;
@@ -5255,8 +5406,28 @@ pure_expr *matrix_complex(pure_expr *x)
   }
   case EXPR::CMATRIX:
     return x;
-  default:
-    return 0;
+  default: {
+    size_t n;
+    pure_expr **xs;
+    if (pure_is_listv(x, &n, &xs)) {
+      for (size_t i = 0; i < n; i++)
+	if (!is_complex(xs[i])) {
+	  free(xs);
+	  return 0;
+	}
+      gsl_matrix_complex *m2 = create_complex_matrix(1, n);
+      double a = 0.0, b = 0.0;
+      for (size_t i = 0; i < n; i++) {
+	size_t k = 2*i;
+	get_complex(xs[i], a, b);
+	m2->data[k] = a;
+	m2->data[k+1] = b;
+      }
+      if (xs) free(xs);
+      return pure_complex_matrix(m2);
+    } else
+      return 0;
+  }
   }
 #else
   return 0;
@@ -5268,6 +5439,19 @@ pure_expr *matrix_int(pure_expr *x)
 {
 #ifdef HAVE_GSL
   switch (x->tag) {
+  case EXPR::MATRIX: {
+    gsl_matrix_symbolic *m1 = (gsl_matrix_symbolic*)x->data.mat.p;
+    size_t n = m1->size1, m = m1->size2;
+    for (size_t i = 0; i < n; i++)
+      for (size_t j = 0; j < m; j++)
+	if (m1->data[i*m1->tda+j]->tag != EXPR::INT)
+	  return 0;
+    gsl_matrix_int *m2 = create_int_matrix(n, m);
+    for (size_t i = 0; i < n; i++)
+      for (size_t j = 0; j < m; j++)
+	m2->data[i*m2->tda+j] = m1->data[i*m1->tda+j]->data.i;
+    return pure_int_matrix(m2);
+  }
   case EXPR::DMATRIX: {
     gsl_matrix *m1 = (gsl_matrix*)x->data.mat.p;
     size_t n = m1->size1, m = m1->size2;
@@ -5292,8 +5476,80 @@ pure_expr *matrix_int(pure_expr *x)
       }
     return pure_int_matrix(m2);
   }
-  default:
-    return 0;
+  default: {
+    size_t n;
+    pure_expr **xs;
+    if (pure_is_listv(x, &n, &xs)) {
+      for (size_t i = 0; i < n; i++)
+	if (xs[i]->tag != EXPR::INT) {
+	  free(xs);
+	  return 0;
+	}
+      gsl_matrix_int *m2 = create_int_matrix(1, n);
+      for (size_t i = 0; i < n; i++)
+	m2->data[i] = xs[i]->data.i;
+      if (xs) free(xs);
+      return pure_int_matrix(m2);
+    } else
+      return 0;
+  }
+  }
+#else
+  return 0;
+#endif
+}
+
+extern "C"
+pure_expr *matrix_symbolic(pure_expr *x)
+{
+#ifdef HAVE_GSL
+  switch (x->tag) {
+  case EXPR::MATRIX:
+    return x;
+  case EXPR::DMATRIX: {
+    gsl_matrix *m1 = (gsl_matrix*)x->data.mat.p;
+    size_t n = m1->size1, m = m1->size2;
+    gsl_matrix_symbolic *m2 = create_symbolic_matrix(n, m);
+    for (size_t i = 0; i < n; i++)
+      for (size_t j = 0; j < m; j++)
+	m2->data[i*m2->tda+j] = pure_double(m1->data[i*m1->tda+j]);
+    return pure_symbolic_matrix(m2);
+  }
+  case EXPR::IMATRIX: {
+    gsl_matrix_int *m1 = (gsl_matrix_int*)x->data.mat.p;
+    size_t n = m1->size1, m = m1->size2;
+    gsl_matrix_symbolic *m2 = create_symbolic_matrix(n, m);
+    for (size_t i = 0; i < n; i++)
+      for (size_t j = 0; j < m; j++)
+	m2->data[i*m2->tda+j] = pure_int(m1->data[i*m1->tda+j]);
+    return pure_symbolic_matrix(m2);
+  }
+  case EXPR::CMATRIX: {
+    gsl_matrix_complex *m1 = (gsl_matrix_complex*)x->data.mat.p;
+    size_t n = m1->size1, m = m1->size2;
+    gsl_matrix_symbolic *m2 = create_symbolic_matrix(n, m);
+    interpreter& interp = *interpreter::g_interp;
+    symbol &rect = interp.symtab.complex_rect_sym();
+    for (size_t i = 0; i < n; i++)
+      for (size_t j = 0; j < m; j++) {
+	size_t l = 2*(i*m1->tda+j);
+	m2->data[i*m2->tda+j] = make_complex2(rect, m1->data[l], m1->data[l+1]);
+      }
+    return pure_symbolic_matrix(m2);
+  }
+  default: {
+    size_t n;
+    pure_expr **xs;
+    if (pure_is_listv(x, &n, &xs)) {
+      gsl_matrix_symbolic *m2 = create_symbolic_matrix(1, n);
+      if (xs) {
+	memcpy(m2->data, xs, n*sizeof(pure_expr*));
+	free(xs);
+      }
+      return pure_symbolic_matrix(m2);
+    } else
+      return 0;
+  }
   }
 #else
   return 0;
@@ -6476,18 +6732,24 @@ char *pure_ctime(int64_t t)
 }
 
 extern "C"
-char *pure_gmtime(int64_t t)
+struct tm *pure_gmtime(int64_t t)
 {
   time_t time = (time_t)t;
-  return asctime(gmtime(&time));
+  return gmtime(&time);
 }
 
 extern "C"
-char *pure_strftime(const char *format, int64_t t)
+struct tm *pure_localtime(int64_t t)
 {
   time_t time = (time_t)t;
+  return localtime(&time);
+}
+
+extern "C"
+char *pure_strftime(const char *format, struct tm *tm)
+{
   static char buf[1024];
-  if (!strftime(buf, 1024, format, localtime(&time)))
+  if (!strftime(buf, 1024, format, tm))
     /* The interface to strftime is rather brain-damaged since it returns zero
        both in case of a buffer overflow and when the resulting string is
        empty. We just pretend that there cannot be any errors and return an
@@ -6938,22 +7200,6 @@ void pure_sys_vars(void)
   df(interp, "stdin",	pure_pointer(stdin));
   df(interp, "stdout",	pure_pointer(stdout));
   df(interp, "stderr",	pure_pointer(stderr));
-  // memory sizes
-  cdf(interp, "SIZEOF_BYTE",	pure_int(1));
-  cdf(interp, "SIZEOF_SHORT",	pure_int(sizeof(short)));
-  cdf(interp, "SIZEOF_INT",	pure_int(sizeof(int)));
-  cdf(interp, "SIZEOF_LONG",	pure_int(sizeof(long)));
-  cdf(interp, "SIZEOF_LONG_LONG",	pure_int(sizeof(long long)));
-  cdf(interp, "SIZEOF_SIZE_T",	pure_int(sizeof(size_t)));
-  cdf(interp, "SIZEOF_FLOAT",	pure_int(sizeof(float)));
-  cdf(interp, "SIZEOF_DOUBLE",	pure_int(sizeof(double)));
-#ifdef HAVE__COMPLEX_FLOAT
-  cdf(interp, "SIZEOF_COMPLEX_FLOAT",	pure_int(sizeof(_Complex float)));
-#endif
-#ifdef HAVE__COMPLEX_DOUBLE
-  cdf(interp, "SIZEOF_COMPLEX_DOUBLE",	pure_int(sizeof(_Complex double)));
-#endif
-  cdf(interp, "SIZEOF_POINTER",	pure_int(sizeof(void*)));
   // clock
   cdf(interp, "CLOCKS_PER_SEC",	pure_int(CLOCKS_PER_SEC));
   // fnmatch, glob
@@ -7342,10 +7588,10 @@ numeric_scanl_loop
   typedef typename element_of< in_mat_type>::type  in_elem_type;
   typedef typename element_of<out_mat_type>::type out_elem_type;
   
-  out_elem_type *outp = out->data+1;
   int32_t ttag = type_tag_of<out_elem_type>::tag; 
   if (in->size1 == 0 || in->size2 == 0) return 0;
 
+  out_elem_type *outp = out->data+1;
   for (size_t i=0; i<in->size1; ++i) {
     *lasti=i;
     in_elem_type *inp = in->data+i*in->tda; 
@@ -7360,9 +7606,6 @@ numeric_scanl_loop
   }
   return 0;
 }
-
-
-
 
 
 //symbolic scanl loop : function results in heterogenous / non-numerical

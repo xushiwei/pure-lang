@@ -2,7 +2,7 @@
 dnl To regenerate the configury after changes:
 dnl autoconf -I config && autoheader -I config
 
-AC_INIT(pure, 0.16)
+AC_INIT(pure, 0.17)
 AC_CONFIG_AUX_DIR(config)
 dnl AC_CONFIG_MACRO_DIR(config)
 AC_CONFIG_HEADERS(config.h)
@@ -22,10 +22,12 @@ PIC=
 DLLEXT=".so"
 AUXLIBS=
 LD_LIB_PATH="LD_LIBRARY_PATH"
+DIFF="diff"
 case "$host" in
     *-*-mingw*)       AUXLIBS="-DLIBGLOB='\"libglob.dll\"' -DLIBREGEX='\"libgnurx-0.dll\"'";
                       LIBS="$LIBS -limagehlp -lpsapi -lmingwex";
-                      LDFLAGS="-Wl,--enable-auto-import"; DLLEXT=".dll";;
+                      LDFLAGS="-Wl,--enable-auto-import"; DLLEXT=".dll";
+                      DIFF="diff --strip-trailing-cr";;
     x86_64-*-linux*)  PIC="-fPIC";;
     *-*-darwin*)      LD_LIB_PATH="DYLD_LIBRARY_PATH";
                       rdynamic=""; shared="-dynamiclib -install_name \$(libdir)/\$(libpure)"; DLLEXT=".dylib";;
@@ -37,6 +39,7 @@ AC_SUBST(PIC)
 AC_SUBST(DLLEXT)
 AC_SUBST(AUXLIBS)
 AC_SUBST(LD_LIB_PATH)
+AC_SUBST(DIFF)
 AC_DEFINE_UNQUOTED(DLLEXT, "${DLLEXT}", [Define to the filename extension for shared libraries.])
 dnl Check for programs.
 AC_PROG_INSTALL
@@ -58,12 +61,12 @@ AC_ARG_ENABLE(debug,
 AC_ARG_ENABLE(debug2,
   [  --enable-debug2         enable the maintenance build],
   [case "${enableval}" in
-    yes)  CPPFLAGS="-DDEBUG=2"; CXXFLAGS="-g" ;;
+    yes)  CPPFLAGS="$CPPFLAGS -DDEBUG=2"; CXXFLAGS="-g" ;;
   esac])
 AC_ARG_ENABLE(release,
   [  --enable-release        enable the release build],
   [case "${enableval}" in
-    yes)  CPPFLAGS="-DNDEBUG -DDEBUG=0"; CXXFLAGS="-O3" ;;
+    yes)  CPPFLAGS="$CPPFLAGS -DNDEBUG -DDEBUG=0"; CXXFLAGS="-O3" ;;
   esac])
 sharedlib=yes
 AC_ARG_ENABLE(shared,
@@ -120,16 +123,16 @@ dnl Check for the new-style template arguments of the IRBuilder class.
 AC_LANG_PUSH([C++])
 save_CXXFLAGS=$CXXFLAGS
 CXXFLAGS="`llvm-config --cppflags` $CXXFLAGS"
-AC_CACHE_CHECK([for new LLVM IRBuilder class], [new_builder],
+AC_CACHE_CHECK([for new LLVM IRBuilder class], [pure_cv_new_builder],
   [AC_COMPILE_IFELSE([AC_LANG_PROGRAM([
        #include <llvm/Support/IRBuilder.h>
       ], [
         llvm::IRBuilder<> b;
       ])
-    ], [new_builder=yes], [new_builder=no])
+    ], [pure_cv_new_builder=yes], [pure_cv_new_builder=no])
   ])
 CXXFLAGS=$save_CXXFLAGS
-if test "$new_builder" = yes; then
+if test "$pure_cv_new_builder" = yes; then
   # do whatever adjusting you need to do for presence of the library:
   AC_DEFINE(NEW_BUILDER, 1, [Define when building with new-style LLVM IRBuilder template class.])
 fi

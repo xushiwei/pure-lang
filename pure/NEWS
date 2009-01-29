@@ -1,4 +1,11 @@
 
+** Pure 0.17 (in progress)
+
+This release features several minor bugfixes and a few changes and additions
+in the library, please see the ChangeLog for details. Also, a severe
+performance issue with the creation of symbolic matrices (reported by Scott
+E. Dillard) was fixed.
+
 ** Pure 0.16 2009-01-12
 
 Yet another bugfix release. Fixes a critical bug reported by Vili Aapro which
