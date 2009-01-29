@@ -217,6 +217,13 @@ let f = \i j -> if doublep i then str (i+j) else 1.0;
 let y = scanl f 0.0 x;
 x; y; list y == scanl f 0.0 (list x);
 
+let f = \i j -> i+j+1.0;
+let y = scanr f 0.0 x;
+x; y; list y == scanr f 0.0 (list x);
+
+let f = \i j -> if doublep j then str (i+j) else 1.0;
+let y = scanr f 0.0 x;
+x; y; list y == scanr f 0.0 (list x);
 
 let x = imatrix {1,2,3;4,5,6};
 
@@ -250,6 +257,14 @@ let f = \i j -> i+j+1;
 let y = scanl f 0 x;
 x; y; list y == scanl f 0 (list x);
 
+let f = \i j -> i+j+1;
+let y = scanl f 0 x;
+x; y; list y == scanl f 0 (list x);
+
+let f = \i j -> i+j+1;
+let y = scanr f 0 x;
+x; y; list y == scanr f 0 (list x);
+
 
 
 let x = {"1","2","3";"aa","bb","cc"};
@@ -278,3 +293,6 @@ x; y; list y == filter f (list x);
 
 let y = scanl (+) "" x;
 x; y; list y == scanl (+) "" (list x);
+
+let y = scanr (+) "" x;
+x; y; list y == scanr (+) "" (list x);

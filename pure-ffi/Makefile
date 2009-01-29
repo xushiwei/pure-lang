@@ -1,24 +1,18 @@
 
 # Package name and version number:
-dist = pd-pure-$(version)
+dist = pure-ffi-$(version)
 version = 0.3
 
 # Try to guess the installation prefix (this needs GNU make):
-prefix = $(patsubst %/bin/pd,%,$(shell which pd 2>/dev/null))
+prefix = $(patsubst %/bin/pure,%,$(shell which pure 2>/dev/null))
 ifeq ($(strip $(prefix)),)
 # Fall back to /usr/local.
 prefix = /usr/local
 endif
 
-# Installation goes into $(libdir)/pd, you can also set this directly
+# Installation goes into $(libdir)/pure, you can also set this directly
 # instead of $(prefix).
 libdir = $(prefix)/lib
-
-# Pd library path.
-pdlibdir = $(libdir)/pd
-
-# Install dir for the external and accompanying stuff.
-pdextradir = $(pdlibdir)/extra/pure
 
 # Try to guess the host system type.
 host = $(shell ./config.guess)
@@ -33,13 +27,9 @@ ifneq "$(findstring -mingw,$(host))" ""
 # Windows
 DLL = .dll
 endif
-ifneq "$(findstring -linux,$(host))" ""
-# Linux
-DLL = .pd_linux
-endif
 ifneq "$(findstring -darwin,$(host))" ""
 # OSX (untested)
-DLL = .pd_darwin
+DLL = .dylib
 shared = -dynamiclib
 endif
 ifneq "$(findstring x86_64-,$(host))" ""
@@ -57,22 +47,22 @@ CFLAGS = -g -O2
 
 FLAGS = $(CPPFLAGS) $(CFLAGS) $(PIC) $(LDFLAGS)
 
-DISTFILES = COPYING Makefile README config.guess pure.c examples/*.pure examples/*.pd examples/*.el
+DISTFILES = COPYING Makefile README config.guess examples/*.pure ffi.c ffi.pure
 
-all: pure$(DLL)
+all: ffi$(DLL)
 
-pure$(DLL): pure.c
-	gcc $(shared) -o $@ -DVERSION="\"$(version)\"" -DLIBDIR="\"$(pdlibdir)\"" $< $(FLAGS) -lpure $(LIBS)
+ffi$(DLL): ffi.c
+	gcc $(shared) -o $@ $< $(FLAGS) -lffi -lpure $(LIBS)
 
 clean:
-	rm -f pure$(DLL) *~ *.a *.o
+	rm -f *$(DLL) *~ *.a *.o
 
 install:
-	test -d "$(DESTDIR)$(pdextradir)" || mkdir -p "$(DESTDIR)$(pdextradir)"
-	cp COPYING README Makefile pure.c pure$(DLL) examples/*.pure examples/*.pd examples/*.el "$(DESTDIR)$(pdextradir)"
+	test -d "$(DESTDIR)$(libdir)/pure" || mkdir -p "$(DESTDIR)$(libdir)/pure"
+	cp ffi.pure ffi$(DLL) "$(DESTDIR)$(libdir)/pure"
 
 uninstall:
-	rm -rf "$(DESTDIR)$(pdextradir)"
+	rm -f "$(DESTDIR)$(libdir)/pure/ffi.pure" "$(DESTDIR)$(libdir)/pure/ffi$(DLL)"
 
 dist:
 	rm -rf $(dist)
@@ -80,4 +70,9 @@ dist:
 	for x in $(DISTFILES); do ln -sf $$PWD/$$x $(dist)/$$x; done
 	rm -f $(dist).tar.gz
 	tar cfzh $(dist).tar.gz $(dist)
+	rm -rf $(dist)
+
+distcheck: dist
+	tar xfz $(dist).tar.gz
+	cd $(dist) && make && make install DESTDIR=./BUILD
 	rm -rf $(dist)
