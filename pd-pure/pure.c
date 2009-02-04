@@ -69,6 +69,9 @@ extern const char *pd_libdir_s(void)
 
 extern pure_expr *pd_path_sl(void)
 {
+#if 1
+  /* You might have to disable this for some Windows builds of pd.dll which
+     for some reason lack sys_searchpath. */
   size_t n;
   pure_expr *xs[1024];
   t_namelist *p = sys_searchpath;
@@ -80,6 +83,9 @@ extern pure_expr *pd_path_sl(void)
     p = p->nl_next;
   }
   return pure_listv(n, xs);
+#else
+  return pure_listv(0, 0);
+#endif
 }
 
 /* Alternate interface to Pd's post() routine. The Pd routine can't be used
@@ -203,6 +209,11 @@ static int void_sym = 0, delay_sym = 0;
 
 typedef struct _pure {
   t_object x_obj;
+#ifdef __MINGW32__
+  /* This seems to be necessary as some as yet undetermined Pd routine seems
+     to write past the end of x_obj on Windows. */
+  int fence;			/* dummy field (not used) */
+#endif
   int n_in, n_out;		/* number of extra inlets and outlets */
   struct _px **in;		/* extra inlet proxies, see t_px below */
   t_outlet **out;		/* outlets */
@@ -218,8 +229,11 @@ typedef struct _pure {
 
 typedef struct _px {
   t_object obj;
-  t_pure *x;			/* parent */
+#ifdef __MINGW32__
+  int fence;
+#endif
   int ix;			/* inlet index */
+  t_pure *x;			/* parent */
 } t_px;
 
 /* The runtime class, which is used to control the Pure runtime environment.
@@ -228,6 +242,9 @@ typedef struct _px {
 
 typedef struct _runtime {
   t_object obj;
+#ifdef __MINGW32__
+  int fence;
+#endif
   t_outlet *out1, *out2;
 } t_runtime;
 
@@ -894,8 +911,6 @@ extern void pure_setup(void)
   char buf[MAXPDSTRING];
   char *ptr;
   int fd;
-  post("pd-pure %s (GPL) 2008 Albert Graef <Dr.Graef@t-online.de>", VERSION);
-  post("pd-pure: compiled for pd-%d.%d on %s %s", PD_MAJOR_VERSION, PD_MINOR_VERSION, __DATE__, __TIME__);
   interp = pure_create_interp(0, 0);
 #if EAGER
   /* Force eager compilation *now*, so that the JIT doesn't start compiling
@@ -904,6 +919,12 @@ extern void pure_setup(void)
   pure_interp_compile(interp);
 #endif
   if (interp) {
+    pure_expr *x = pure_symbol(pure_sym("version"));
+    char *pure_version = 0;
+    pure_is_cstring_dup(x, &pure_version);
+    post("pd-pure %s (pure-%s) (c) 2008 Albert Graef <Dr.Graef@t-online.de>", VERSION, pure_version);
+    post("pd-pure: compiled for pd-%d.%d on %s %s", PD_MAJOR_VERSION, PD_MINOR_VERSION, __DATE__, __TIME__);
+    if (pure_version) free (pure_version);
     /* Register the loader for Pure externals. */
     sys_register_loader(pure_loader);
     /* Create the proxy class for extra inlets. */

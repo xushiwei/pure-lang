@@ -1,7 +1,7 @@
 
 # Package name and version number:
 dist = pure-gsl-$(version)
-version = 0.3.1
+version = 0.4
 
 # Try to guess the installation prefix (this needs GNU make):
 prefix = $(patsubst %/bin/pure,%,$(shell which pure 2>/dev/null))
@@ -52,7 +52,7 @@ DISTFILES = COPYING Makefile README config.guess examples/*.pure gsl.c gsl.pure
 all: gsl$(DLL)
 
 gsl$(DLL): gsl.c
-	gcc $(shared) -o $@ $< $(FLAGS) -lgsl -lgslcblas -lm -lpure $(LIBS)
+	$(CC) $(shared) -o $@ $< $(FLAGS) -lgsl -lgslcblas -lm -lpure $(LIBS)
 
 clean:
 	rm -f *$(DLL) *~ *.a *.o

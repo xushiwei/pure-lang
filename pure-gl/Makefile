@@ -1,24 +1,18 @@
 
 # Package name and version number:
-dist = pd-pure-$(version)
+dist = pure-gl-$(version)
 version = 0.4
 
 # Try to guess the installation prefix (this needs GNU make):
-prefix = $(patsubst %/bin/pd,%,$(shell which pd 2>/dev/null))
+prefix = $(patsubst %/bin/pure,%,$(shell which pure 2>/dev/null))
 ifeq ($(strip $(prefix)),)
 # Fall back to /usr/local.
 prefix = /usr/local
 endif
 
-# Installation goes into $(libdir)/pd, you can also set this directly
+# Installation goes into $(libdir)/pure, you can also set this directly
 # instead of $(prefix).
 libdir = $(prefix)/lib
-
-# Pd library path.
-pdlibdir = $(libdir)/pd
-
-# Install dir for the external and accompanying stuff.
-pdextradir = $(pdlibdir)/extra/pure
 
 # Try to guess the host system type.
 host = $(shell ./config.guess)
@@ -27,22 +21,19 @@ host = $(shell ./config.guess)
 #PIC = -fPIC # uncomment for x86-64 compilation
 DLL = .so
 shared = -shared
+LinkGL = -lGL
 
 # Take care of some common systems.
 ifneq "$(findstring -mingw,$(host))" ""
 # Windows
 DLL = .dll
-LIBS = -lpd
-LDFLAGS = -Wl,--enable-auto-import
-endif
-ifneq "$(findstring -linux,$(host))" ""
-# Linux
-DLL = .pd_linux
+LinkGL = -lopengl32
 endif
 ifneq "$(findstring -darwin,$(host))" ""
 # OSX (untested)
-DLL = .pd_darwin
+DLL = .dylib
 shared = -dynamiclib
+LinkGL = -framework OpenGL
 endif
 ifneq "$(findstring x86_64-,$(host))" ""
 # 64 bit, needs -fPIC flag
@@ -57,25 +48,26 @@ endif
 
 CFLAGS = -g -O2
 
-DISTFILES = COPYING Makefile README config.guess pure.c examples/*.pure examples/*.pd examples/*.el
+FLAGS = $(CPPFLAGS) $(CFLAGS) $(PIC) $(LDFLAGS)
 
-all: pure$(DLL)
+DISTFILES = COPYING Makefile README config.guess examples/*.pure pure-gl.c \
+GL.pure GLU.pure GLUT.pure GL_ARB.pure GL_EXT.pure GL_NV.pure GL_ATI.pure
 
-pure$(DLL): pure.o
-	$(CC) $(shared) -o $@ $(PIC) $(LDFLAGS) $< -lpure $(LIBS)
+all: pure-gl$(DLL)
 
-pure.o: pure.c
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(PIC) -o $@ -c $< -DVERSION="\"$(version)\"" -DLIBDIR="\"$(pdlibdir)\""
+pure-gl$(DLL): pure-gl.c
+	$(CC) $(shared) -o $@ $< $(FLAGS) $(LinkGL) -lpure $(LIBS)
 
 clean:
-	rm -f pure$(DLL) *~ *.a *.o
+	rm -f *$(DLL) *~ *.a *.o
 
 install:
-	test -d "$(DESTDIR)$(pdextradir)" || mkdir -p "$(DESTDIR)$(pdextradir)"
-	cp COPYING README Makefile pure.c pure$(DLL) examples/*.pure examples/*.pd examples/*.el "$(DESTDIR)$(pdextradir)"
+	test -d "$(DESTDIR)$(libdir)/pure" || mkdir -p "$(DESTDIR)$(libdir)/pure"
+	cp GL.pure GLU.pure GLUT.pure GL_ARB.pure GL_EXT.pure GL_NV.pure GL_ATI.pure \
+	   pure-gl$(DLL) "$(DESTDIR)$(libdir)/pure"
 
 uninstall:
-	rm -rf "$(DESTDIR)$(pdextradir)"
+	rm -f "$(DESTDIR)$(libdir)/pure/gsl.pure" "$(DESTDIR)$(libdir)/pure/gsl$(DLL)"
 
 dist:
 	rm -rf $(dist)
@@ -83,4 +75,9 @@ dist:
 	for x in $(DISTFILES); do ln -sf $$PWD/$$x $(dist)/$$x; done
 	rm -f $(dist).tar.gz
 	tar cfzh $(dist).tar.gz $(dist)
+	rm -rf $(dist)
+
+distcheck: dist
+	tar xfz $(dist).tar.gz
+	cd $(dist) && make && make install DESTDIR=./BUILD
 	rm -rf $(dist)
