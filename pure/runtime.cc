@@ -7806,7 +7806,7 @@ numeric_scanr_loop
       *lastj=j;
       pure_expr *zz = pure_new(z);
       z = pure_appl( f, 2, to_expr(*inp), z );
-      if (from_expr(z,v)) return z;
+      if (!from_expr(z,v)) return z;
       *outp = v;
       pure_free(zz);
     }
