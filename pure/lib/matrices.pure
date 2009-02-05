@@ -355,7 +355,7 @@ all p x::matrix		= foldl (\b x -> b && p x) 1 x; //probably not worth
 any p x::matrix		= foldl (\b x -> b || p x) 0 x; //the effort to short-
                                                         //circuit here
 
-do f x::matrix		= foldl (\x -> f x $$ ()) () x;
+do f x::matrix		= foldl (\_ x -> f x $$ ()) () x;
 
 drop k::int x::matrix	= x!!(k..#x-1);
 dropwhile p x::matrix	= colcat (dropwhile p (list x));
