@@ -3,7 +3,8 @@
 
 #include <pure/runtime.h>
 
-/* Some of this is cribbed from Sven Panne's excellent Haskel OpenGL bindings */
+/* Some of this is cribbed from Sven Panne's excellent Haskell OpenGL
+   bindings. */
 
 /*
 Copyright (c) 2009, Scott E Dillard
@@ -37,13 +38,40 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
 */
 
+#ifndef _WIN32
+#define APIENTRY 
+#endif
 
 #if defined(_WIN32) /* Windows */
+#include <windows.h>
 #include <GL/gl.h>
-#include <GL/wgl.h>
-#define get_proc_addr(x) wglGetProcAddress((LPCSTR)(x))
-#elif defined(USE_QUARTZ_OPENGL) /* Mac */
+#include <GL/glu.h>
+#include <GL/glut.h>
+
+static void*
+get_proc_addr(const char *name)
+{
+  static int firstTime = 1;
+  static HINSTANCE gl32 = 0, glu32 = 0, glut = 0;
+  void *p;
+  if (firstTime) {
+    gl32 = LoadLibrary("opengl32.dll");
+    glu32 = LoadLibrary("glu32.dll");
+    glut = LoadLibrary("freeglut.dll");
+    firstTime = 0;
+  }
+  (void)
+    ((p = wglGetProcAddress(name)) ||
+     (p = GetProcAddress(gl32, name)) ||
+     (p = GetProcAddress(glu32, name)) ||
+     (p = GetProcAddress(glut, name)));
+  return p;
+}
+
+#elif defined(__APPLE__) /* Mac */
 #include <OpenGL/gl.h>
+#include <OpenGL/glu.h>
+#include <OpenGL/glut.h>
 #include <mach-o/dyld.h>
 
 static void*
@@ -76,6 +104,9 @@ get_proc_addr(const char *name)
 
 /* ToDo: This should really be based on a feature test. */
 #elif defined(__sgi) || defined (__sun)
+#include <GL/gl.h>
+#include <GL/glu.h>
+#include <GL/glut.h>
 #include <dlfcn.h>
 
 static const char* gpaNames[] = {
@@ -124,15 +155,47 @@ get_proc_addr(const char *name)
 
 #else /* Linux */
 #include <GL/gl.h>
+#include <GL/glu.h>
+#include <GL/glut.h>
 #include <GL/glx.h>
-#define get_proc_addr(x) glXGetProcAddress((const GLubyte*)(x))
-#endif
+#include <dlfcn.h>
 
-
-static void throw_unsupported( const char* name )
+static void*
+get_proc_addr(const char *name)
 {
-    pure_throw( pure_app( pure_symbol(pure_sym("gl_unsupported")), 
-                          pure_cstring_dup(name) ));
+  static int firstTime = 1;
+  static void *glu = NULL, *glut = NULL;
+  void *p;
+  if (firstTime) {
+    firstTime = 0;
+    glu = dlopen("libGLU.so", RTLD_LAZY);
+    glut = dlopen("libglut.so", RTLD_LAZY);
+  }
+  /* Make sure to call these in this order. For whatever reason,
+     glXGetProcAddress appears to yield bogus addresses for GLUT routines. */
+  (void)
+    ((glu && (p = dlsym(glu, name))) ||
+     (glut && (p = dlsym(glut, name))) ||
+     (p = glXGetProcAddress((const GLubyte*)name)));
+  return p;
 }
 
+#endif
 
+static void throw_unsupported(const char* name)
+{
+  pure_throw(pure_app(pure_symbol(pure_sym("gl_unsupported")), 
+		      pure_cstring_dup(name) ));
+}
+%%
+
+%r %w(%p)
+{
+  static %r(APIENTRY*ptr)(%p) = NULL;
+  static const char name[] = "%n";
+  if (!ptr) {
+    ptr = (%r(APIENTRY*)(%p))get_proc_addr(name);
+    if (!ptr) throw_unsupported(name);
+  }
+  return (*ptr)(%a);
+}

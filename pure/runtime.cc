@@ -700,10 +700,33 @@ pure_expr *pure_symbol(int32_t tag)
     // Since we just created this variable, it doesn't have any closure bound
     // to it yet, so it's safe to just return the symbol as is.
     return v.x;
-  } else
-    // The symbol already exists, so there might be a parameterless closure
-    // bound to it and thus we need to evaluate it.
+  } else {
+    // The symbol already has a definition, so we might have to evaluate it on
+    // the fly.
+    map<int32_t,ExternInfo>::const_iterator it = interp.externals.find(tag);
+    if (it != interp.externals.end()) {
+      // We have an external. This case must be treated separately, since v
+      // just points to a box for the Pure function symbol rather than the
+      // external wrapper function itself.
+      const ExternInfo& info = it->second;
+      size_t n = info.argtypes.size();
+      void *f = interp.JIT->getPointerToFunction(info.f);
+      if (f) {
+	if (n == 0)
+	  // Parameterless external, do a direct call.
+	  return ((pure_expr *(*)(void))f) ();
+	else
+	  // External with parameters. Build an fbox for the external, return
+	  // this as the value of the symbol.
+	  return pure_clos(false, false, tag, n, f, 0, 0);
+      }
+      // If we come here, the external wrapper failed to compile for some
+      // reason, just proceed as if it was an ordinary Pure function.
+    }
+    // We have an ordinary Pure symbol. There might be a parameterless closure
+    // bound to it, pure_call takes care of that case.
     return pure_call(v.x);
+  }
 }
 
 extern "C"
@@ -1845,7 +1868,7 @@ static inline pure_expr *mk_void()
 static inline pure_expr *mk_pair(pure_expr *x, pure_expr *y)
 {
   interpreter& interp = *interpreter::g_interp;
-  pure_expr *f = pure_const(interp.symtab.pair_sym().f);
+  pure_expr *f = pure_symbol(interp.symtab.pair_sym().f);
   return pure_apply2(pure_apply2(f, x), y);
 }
 
@@ -2749,6 +2772,80 @@ void *pure_get_matrix(pure_expr *x)
   assert(x && x->tag == EXPR::MATRIX || x->tag == EXPR::DMATRIX ||
 	 x->tag == EXPR::CMATRIX || x->tag == EXPR::IMATRIX);
   return x->data.mat.p;
+}
+
+extern "C"
+void *pure_get_matrix_data(pure_expr *x)
+{
+  switch (x->tag) {
+  case EXPR::MATRIX: {
+    gsl_matrix_symbolic *m = (gsl_matrix_symbolic*)x->data.mat.p;
+    return m->data;
+  }
+#ifdef HAVE_GSL
+  case EXPR::DMATRIX: {
+    gsl_matrix *m = (gsl_matrix*)x->data.mat.p;
+    return m->data;
+  }
+  case EXPR::CMATRIX: {
+    gsl_matrix_complex *m = (gsl_matrix_complex*)x->data.mat.p;
+    return m->data;
+  }
+  case EXPR::IMATRIX:{
+    gsl_matrix_int *m = (gsl_matrix_int*)x->data.mat.p;
+    return m->data;
+  }
+#endif
+  default:
+    assert(0 && "not a matrix");
+    return 0;
+  }
+}
+
+list<void*> cvector_temps; // XXXFIXME: This should be TLD.
+
+void *pure_get_matrix_data_byte(pure_expr *x)
+{
+  void *v = matrix_to_byte_array(0, x);
+  cvector_temps.push_back(v);
+  return v;
+}
+
+void *pure_get_matrix_data_short(pure_expr *x)
+{
+  void *v = matrix_to_short_array(0, x);
+  cvector_temps.push_back(v);
+  return v;
+}
+
+void *pure_get_matrix_data_int(pure_expr *x)
+{
+  void *v = matrix_to_int_array(0, x);
+  cvector_temps.push_back(v);
+  return v;
+}
+
+void *pure_get_matrix_data_float(pure_expr *x)
+{
+  void *v = matrix_to_float_array(0, x);
+  cvector_temps.push_back(v);
+  return v;
+}
+
+void *pure_get_matrix_data_double(pure_expr *x)
+{
+  void *v = matrix_to_double_array(0, x);
+  cvector_temps.push_back(v);
+  return v;
+}
+
+extern "C"
+void pure_free_cvectors()
+{
+  for (list<void*>::iterator t = cvector_temps.begin();
+       t != cvector_temps.end(); t++)
+    if (*t) free(*t);
+  cvector_temps.clear();
 }
 
 extern "C"

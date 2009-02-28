@@ -383,6 +383,20 @@ interpreter::interpreter()
 		 "pure_get_int",     "int",   1, "expr*");
   declare_extern((void*)pure_get_matrix,
 		 "pure_get_matrix",  "void*", 1, "expr*");
+  declare_extern((void*)pure_get_matrix_data,
+		 "pure_get_matrix_data", "void*", 1, "expr*");
+  declare_extern((void*)pure_get_matrix_data_byte,
+		 "pure_get_matrix_data_byte", "void*", 1, "expr*");
+  declare_extern((void*)pure_get_matrix_data_short,
+		 "pure_get_matrix_data_short", "void*", 1, "expr*");
+  declare_extern((void*)pure_get_matrix_data_int,
+		 "pure_get_matrix_data_int", "void*", 1, "expr*");
+  declare_extern((void*)pure_get_matrix_data_float,
+		 "pure_get_matrix_data_float", "void*", 1, "expr*");
+  declare_extern((void*)pure_get_matrix_data_double,
+		 "pure_get_matrix_data_double", "void*", 1, "expr*");
+  declare_extern((void*)pure_free_cvectors,
+		 "pure_free_cvectors","void", 0);
 
   declare_extern((void*)pure_catch,
 		 "pure_catch",      "expr*",  2, "expr*", "expr*");
@@ -2615,7 +2629,7 @@ expr interpreter::macsubst(expr x)
 
 /* Perform a single macro reduction step. */
 
-expr interpreter::varsubst(expr x, uint8_t offs)
+expr interpreter::varsubst(expr x, uint8_t offs, uint8_t idx)
 {
   char test;
   if (x.is_null()) return x;
@@ -2624,6 +2638,9 @@ expr interpreter::varsubst(expr x, uint8_t offs)
   switch (x.tag()) {
   case EXPR::VAR:
   case EXPR::FVAR:
+    if (x.vidx() < idx)
+      /* reference to local environment inside the substituted value; skip */
+      return x;
     if (((uint32_t)x.vidx()) + offs > 0xff)
       throw err("error in expression (too many nested closures)");
     if (x.tag() == EXPR::VAR)
@@ -2646,42 +2663,59 @@ expr interpreter::varsubst(expr x, uint8_t offs)
       exprl& vs = us->back();
       for (exprl::iterator ys = xs->begin(), end = xs->end();
 	   ys != end; ys++) {
-	vs.push_back(varsubst(*ys, offs));
+	vs.push_back(varsubst(*ys, offs, idx));
       }
     }
     return expr(EXPR::MATRIX, us);
   }
   // application:
   case EXPR::APP: {
-    expr u = varsubst(x.xval1(), offs),
-      v = varsubst(x.xval2(), offs);
-    expr w = expr(u, v);
-    return macval(w);
+    if (x.xval1().tag() == symtab.amp_sym().f) {
+      if (++idx == 0)
+	throw err("error in expression (too many nested closures)");
+      expr v = varsubst(x.xval2(), offs, idx);
+      return expr(symtab.amp_sym().x, v);
+    } else if (x.xval1().tag() == EXPR::APP &&
+	       x.xval1().xval1().tag() == symtab.catch_sym().f) {
+      expr u = varsubst(x.xval1().xval2(), offs, idx);
+      if (++idx == 0)
+	throw err("error in expression (too many nested closures)");
+      expr v = varsubst(x.xval2(), offs, idx);
+      return expr(symtab.catch_sym().x, u, v);
+    } else {
+      expr u = varsubst(x.xval1(), offs, idx),
+	v = varsubst(x.xval2(), offs, idx);
+      return expr(u, v);
+    }
   }
   // conditionals:
   case EXPR::COND: {
-    expr u = varsubst(x.xval1(), offs),
-      v = varsubst(x.xval2(), offs),
-      w = varsubst(x.xval3(), offs);
+    expr u = varsubst(x.xval1(), offs, idx),
+      v = varsubst(x.xval2(), offs, idx),
+      w = varsubst(x.xval3(), offs, idx);
     return expr::cond(u, v, w);
   }
   case EXPR::COND1: {
-    expr u = varsubst(x.xval1(), offs),
-      v = varsubst(x.xval2(), offs);
+    expr u = varsubst(x.xval1(), offs, idx),
+      v = varsubst(x.xval2(), offs, idx);
     return expr::cond1(u, v);
   }
   // nested closures:
   case EXPR::LAMBDA: {
-    expr u = x.xval1(), v = varsubst(x.xval2(), offs);
+    if (++idx == 0)
+      throw err("error in expression (too many nested closures)");
+    expr u = x.xval1(), v = varsubst(x.xval2(), offs, idx);
     return expr::lambda(u, v);
   }
   case EXPR::CASE: {
-    expr u = varsubst(x.xval(), offs);
+    expr u = varsubst(x.xval(), offs, idx);
+    if (++idx == 0)
+      throw err("error in expression (too many nested closures)");
     const rulel *r = x.rules();
     rulel *s = new rulel;
     for (rulel::const_iterator it = r->begin(); it != r->end(); ++it) {
-      expr u = it->lhs,	v = varsubst(it->rhs, offs),
-	w = varsubst(it->qual, offs);
+      expr u = it->lhs,	v = varsubst(it->rhs, offs, idx),
+	w = varsubst(it->qual, offs, idx);
       s->push_back(rule(u, v, w));
     }
     return expr::cases(u, s);
@@ -2690,14 +2724,18 @@ expr interpreter::varsubst(expr x, uint8_t offs)
     const rulel *r = x.rules();
     rulel *s = new rulel;
     for (rulel::const_iterator it = r->begin(); it != r->end(); ++it) {
-      expr u = it->lhs, v = varsubst(it->rhs, offs);
+      expr u = it->lhs, v = varsubst(it->rhs, offs, idx);
       s->push_back(rule(u, v));
+      if (++idx == 0)
+	throw err("error in expression (too many nested closures)");
     }
-    expr u = varsubst(x.xval(), offs);
+    expr u = varsubst(x.xval(), offs, idx);
     return expr::when(u, s);
   }
   case EXPR::WITH: {
-    expr u = varsubst(x.xval(), offs);
+    expr u = varsubst(x.xval(), offs, idx);
+    if (++idx == 0)
+      throw err("error in expression (too many nested closures)");
     const env *e = x.fenv();
     env *f = new env;
     for (env::const_iterator it = e->begin(); it != e->end(); ++it) {
@@ -2706,8 +2744,8 @@ expr interpreter::varsubst(expr x, uint8_t offs)
       const rulel *r = info.rules;
       rulel s;
       for (rulel::const_iterator jt = r->begin(); jt != r->end(); ++jt) {
-	expr u = jt->lhs, v = varsubst(jt->rhs, offs),
-	  w = varsubst(jt->qual, offs);
+	expr u = jt->lhs, v = varsubst(jt->rhs, offs, idx),
+	  w = varsubst(jt->qual, offs, idx);
 	s.push_back(rule(u, v, w));
       }
       (*f)[g] = env_info(info.argc, s, info.temp);
@@ -2739,9 +2777,10 @@ expr interpreter::macred(expr x, expr y, uint8_t idx)
   case EXPR::VAR:
     if (y.vidx() == idx) {
       /* Substitute the macro variables, which are the lhs values whose idx
-	 match the current idx. Note that the deBruijn indices inside the
-	 substituted value must then be shifted by idx, to accommodate for any
-	 local environments inside the macro definition. */
+	 match the current idx. We also have to translate deBruijn indices
+	 inside the substituted value which refer to bindings outside the
+	 macro parameter, to account for local environments inside the macro
+	 definition. */
       expr v = varsubst(subterm(x, y.vpath()), idx);
 #if DEBUG>1
       std::cerr << "macro var: " << y << " = " << v
@@ -2781,7 +2820,16 @@ expr interpreter::macred(expr x, expr y, uint8_t idx)
     } else {
       expr u = macred(x, y.xval1(), idx),
 	v = macred(x, y.xval2(), idx);
-      return expr(u, v);
+      if (u.tag() == symtab.amp_sym().f ||
+	  (u.tag() == EXPR::APP &&
+	   u.xval1().tag() == symtab.catch_sym().f)) {
+	/* A catch clause or thunk was created through macro
+	   substitution. Translate the deBruijn indices in the body
+	   accordingly. */
+	expr w = varsubst(v, 1);
+	return expr(u, w);
+      } else
+	return expr(u, v);
     }
   // conditionals:
   case EXPR::COND: {
@@ -3966,6 +4014,8 @@ const Type *interpreter::named_type(string name)
     return PointerType::get(Type::Int32Ty, 0);
   else if (name == "long*")
     return PointerType::get(Type::Int64Ty, 0);
+  else if (name == "float*")
+    return PointerType::get(Type::FloatTy, 0);
   else if (name == "double*")
     return PointerType::get(Type::DoubleTy, 0);
   else if (name == "expr*")
@@ -4050,10 +4100,10 @@ Function *interpreter::declare_extern(void *fp, string name, string restype,
     argtypes.push_back(s);
   }
   va_end(ap);
-  return declare_extern(name, restype, argtypes, varargs, fp);
+  return declare_extern(-1, name, restype, argtypes, varargs, fp);
 }
 
-Function *interpreter::declare_extern(string name, string restype,
+Function *interpreter::declare_extern(int priv, string name, string restype,
 				      const list<string>& argtypes,
 				      bool varargs, void *fp,
 				      string asname)
@@ -4102,7 +4152,18 @@ Function *interpreter::declare_extern(string name, string restype,
       argt[i] = Type::Int64Ty;
   if (asname.empty()) asname = name;
   string asid = (*symtab.current_namespace)+"::"+asname;
-  symbol* _sym = symtab.sym(asid);
+  symbol* _sym = symtab.lookup(asid);
+  /* If the symbol is already declared and we have a public/private specifier,
+     make sure that they match up. */
+  if (_sym) {
+    if (priv >= 0 && _sym->priv != priv)
+      throw err("symbol '"+asid+"' already declared "+
+		(_sym->priv?"'private'":"'public'"));
+  } else {
+    _sym = symtab.sym(asid);
+    if (priv >= 0)
+      _sym->priv = priv;
+  }
   assert(_sym);
   symbol& sym = *_sym;
   if (globenv.find(sym.f) != globenv.end() &&
@@ -4201,7 +4262,7 @@ Function *interpreter::declare_extern(string name, string restype,
   vector<const Type*> argt2(n, ExprPtrTy);
   FunctionType *ft2 = FunctionType::get(ExprPtrTy, argt2, false);
   Function *f = Function::Create(ft2, Function::InternalLinkage,
-				 "$$wrap."+asname, module);
+				 "$$wrap."+asid, module);
   vector<Value*> args(n), unboxed(n);
   Function::arg_iterator a = f->arg_begin();
   for (size_t i = 0; a != f->arg_end(); ++a, ++i) {
@@ -4212,7 +4273,7 @@ Function *interpreter::declare_extern(string name, string restype,
     *failedbb = BasicBlock::Create("failed");
   b.SetInsertPoint(bb);
   // unbox arguments
-  bool temps = false;
+  bool temps = false, vtemps = false;
   for (size_t i = 0; i < n; i++) {
     Value *x = args[i];
     // check for thunks which must be forced
@@ -4383,11 +4444,7 @@ Function *interpreter::declare_extern(string name, string restype,
       b.SetInsertPoint(okbb);
       Value *sv = b.CreateCall(module->getFunction("pure_get_cstring"), x);
       unboxed[i] = sv; temps = true;
-    } else if (argt[i] == PointerType::get(Type::Int16Ty, 0) ||
-	       argt[i] == PointerType::get(Type::Int32Ty, 0) ||
-	       argt[i] == PointerType::get(Type::Int64Ty, 0) ||
-	       argt[i] == PointerType::get(Type::FloatTy, 0) ||
-	       argt[i] == PointerType::get(Type::DoubleTy, 0)) {
+    } else if (argt[i] == PointerType::get(Type::Int64Ty, 0)) {
       BasicBlock *okbb = BasicBlock::Create("ok");
       Value *idx[2] = { Zero, Zero };
       Value *tagv = b.CreateLoad(b.CreateGEP(x, idx, idx+2), "tag");
@@ -4399,6 +4456,46 @@ Function *interpreter::declare_extern(string name, string restype,
       idx[1] = ValFldIndex;
       Value *ptrv = b.CreateLoad(b.CreateGEP(pv, idx, idx+2), "ptrval");
       unboxed[i] = b.CreateBitCast(ptrv, argt[i]);
+    } else if (argt[i] == PointerType::get(Type::Int16Ty, 0) ||
+	       argt[i] == PointerType::get(Type::Int32Ty, 0) ||
+	       argt[i] == PointerType::get(Type::DoubleTy, 0) ||
+	       argt[i] == PointerType::get(Type::FloatTy, 0)) {
+      /* These get special treatment, because we also allow numeric matrices
+	 to be passed as an integer or floating point vector here. */
+      BasicBlock *ptrbb = BasicBlock::Create("ptr");
+      BasicBlock *matrixbb = BasicBlock::Create("matrix");
+      BasicBlock *okbb = BasicBlock::Create("ok");
+      Value *idx[2] = { Zero, Zero };
+      Value *tagv = b.CreateLoad(b.CreateGEP(x, idx, idx+2), "tag");
+      SwitchInst *sw = b.CreateSwitch(tagv, failedbb, 4);
+      Function *get_fun = module->getFunction
+	((argt[i] == PointerType::get(Type::Int16Ty, 0)) ?
+	 "pure_get_matrix_data_short" :
+	 (argt[i] == PointerType::get(Type::Int32Ty, 0)) ?
+	 "pure_get_matrix_data_int" :
+	 (argt[i] == PointerType::get(Type::FloatTy, 0)) ?
+	 "pure_get_matrix_data_float" :
+	 "pure_get_matrix_data_double");
+      sw->addCase(SInt(EXPR::PTR), ptrbb);
+      sw->addCase(SInt(EXPR::DMATRIX), matrixbb);
+      sw->addCase(SInt(EXPR::CMATRIX), matrixbb);
+      sw->addCase(SInt(EXPR::IMATRIX), matrixbb);
+      f->getBasicBlockList().push_back(ptrbb);
+      b.SetInsertPoint(ptrbb);
+      Value *pv = b.CreateBitCast(x, PtrExprPtrTy, "ptrexpr");
+      idx[1] = ValFldIndex;
+      Value *ptrv = b.CreateLoad(b.CreateGEP(pv, idx, idx+2), "ptrval");
+      b.CreateBr(okbb);
+      f->getBasicBlockList().push_back(matrixbb);
+      b.SetInsertPoint(matrixbb);
+      Value *matrixv = b.CreateCall(get_fun, x);
+      b.CreateBr(okbb);
+      f->getBasicBlockList().push_back(okbb);
+      b.SetInsertPoint(okbb);
+      PHINode *phi = b.CreatePHI(VoidPtrTy);
+      phi->addIncoming(ptrv, ptrbb);
+      phi->addIncoming(matrixv, matrixbb);
+      unboxed[i] = b.CreateBitCast(phi, argt[i]); vtemps = true;
     } else if (argt[i] == GSLMatrixPtrTy ||
 	       argt[i] == GSLDoubleMatrixPtrTy ||
 	       argt[i] == GSLComplexMatrixPtrTy ||
@@ -4427,20 +4524,26 @@ Function *interpreter::declare_extern(string name, string restype,
     } else if (argt[i] == VoidPtrTy) {
       BasicBlock *ptrbb = BasicBlock::Create("ptr");
       BasicBlock *mpzbb = BasicBlock::Create("mpz");
+      BasicBlock *matrixbb = BasicBlock::Create("matrix");
       BasicBlock *okbb = BasicBlock::Create("ok");
       Value *idx[2] = { Zero, Zero };
       Value *tagv = b.CreateLoad(b.CreateGEP(x, idx, idx+2), "tag");
-      SwitchInst *sw = b.CreateSwitch(tagv, failedbb, 3);
-      /* We also allow bigints and strings to be passed as a void* here. The
-	 former lets you use GMP routines directly in Pure if you declare the
-	 mpz_t params as void*. The latter allows a string to be passed
-	 without implicitly converting it to the system encoding first. Note
-	 that in both cases a direct pointer to the data will be passed, which
-	 enables mutation of the data; if this isn't desired then you should
-	 copy the data first. */
+      SwitchInst *sw = b.CreateSwitch(tagv, failedbb, 7);
+      /* We also allow bigints, strings and matrices to be passed as a void*
+	 here. The first case lets you use GMP routines directly in Pure if
+	 you declare the mpz_t params as void*. The second case allows a
+	 string to be passed without implicitly converting it to the system
+	 encoding first. The third case allows the raw data of a matrix to be
+	 passed. Note that in all cases a direct pointer to the data will be
+	 passed, which enables mutation of the data; if this isn't desired
+	 then you should copy the data first. */
       sw->addCase(SInt(EXPR::PTR), ptrbb);
       sw->addCase(SInt(EXPR::STR), ptrbb);
       sw->addCase(SInt(EXPR::BIGINT), mpzbb);
+      sw->addCase(SInt(EXPR::MATRIX), matrixbb);
+      sw->addCase(SInt(EXPR::DMATRIX), matrixbb);
+      sw->addCase(SInt(EXPR::CMATRIX), matrixbb);
+      sw->addCase(SInt(EXPR::IMATRIX), matrixbb);
       f->getBasicBlockList().push_back(ptrbb);
       b.SetInsertPoint(ptrbb);
       // The following will work with both pointer and string expressions.
@@ -4453,11 +4556,18 @@ Function *interpreter::declare_extern(string name, string restype,
       // Handle the case of a bigint (mpz_t -> void*).
       Value *mpzv = b.CreateCall(module->getFunction("pure_get_bigint"), x);
       b.CreateBr(okbb);
+      // Handle the case of a matrix (gsl_matrix_xyz* -> void*).
+      f->getBasicBlockList().push_back(matrixbb);
+      b.SetInsertPoint(matrixbb);
+      Value *matrixv =
+	b.CreateCall(module->getFunction("pure_get_matrix_data"), x);
+      b.CreateBr(okbb);
       f->getBasicBlockList().push_back(okbb);
       b.SetInsertPoint(okbb);
       PHINode *phi = b.CreatePHI(VoidPtrTy);
       phi->addIncoming(ptrv, ptrbb);
       phi->addIncoming(mpzv, mpzbb);
+      phi->addIncoming(matrixv, matrixbb);
       unboxed[i] = phi;
       if (gt->getParamType(i)==CharPtrTy)
 	// An external builtin already has this parameter declared as char*.
@@ -4471,6 +4581,7 @@ Function *interpreter::declare_extern(string name, string restype,
   Value* u = b.CreateCall(g, unboxed.begin(), unboxed.end());
   // free temporaries
   if (temps) b.CreateCall(module->getFunction("pure_free_cstrings"));
+  if (vtemps) b.CreateCall(module->getFunction("pure_free_cvectors"));
   // box the result
   if (type == Type::VoidTy)
     u = b.CreateCall(module->getFunction("pure_const"),
@@ -4543,6 +4654,7 @@ Function *interpreter::declare_extern(string name, string restype,
   b.SetInsertPoint(failedbb);
   // free temporaries
   if (temps) b.CreateCall(module->getFunction("pure_free_cstrings"));
+  if (vtemps) b.CreateCall(module->getFunction("pure_free_cvectors"));
   // As default, create a cbox for the function symbol and apply that to our
   // parameters. The cbox may be patched up later to become a Pure function.
   // In effect, this allows an external function to be augmented with Pure
@@ -4609,7 +4721,7 @@ pure_expr *interpreter::const_value(expr x)
     return const_matrix_value(x);
   case EXPR::APP: {
     exprl xs;
-    if (x.is_list(xs) || (x.is_pair() && x.is_tuplex(xs))) {
+    if (x.is_list(xs) || (x.is_pair() && x.is_tuple(xs))) {
       // proper lists and tuples
       size_t i, n = xs.size();
       pure_expr **xv = (pure_expr**)malloc(n*sizeof(pure_expr*));
@@ -4856,6 +4968,7 @@ pure_expr *interpreter::dodefn(env vars, expr lhs, expr rhs, pure_expr*& e)
   // matched => emit code for binding the variables
   f.f->getBasicBlockList().push_back(matchedbb);
   f.builder.SetInsertPoint(matchedbb);
+  list<pure_expr*> cache;
   for (env::const_iterator it = vars.begin(); it != vars.end(); ++it) {
     int32_t tag = it->first;
     const env_info& info = it->second;
@@ -4880,7 +4993,10 @@ pure_expr *interpreter::dodefn(env vars, expr lhs, expr rhs, pure_expr*& e)
 	   sym.s, module);
       JIT->addGlobalMapping(v.v, &v.x);
     }
-    if (v.x) call("pure_free", f.builder.CreateLoad(v.v));
+    /* Cache any old value so that we can free it later. Note that it is not
+       safe to do so right away, because the value may be reused in one of the
+       current assignments. */
+    if (v.x) cache.push_back(v.x);
     call("pure_new", x);
 #if DEBUG>2
     ostringstream msg;
@@ -4912,7 +5028,12 @@ pure_expr *interpreter::dodefn(env vars, expr lhs, expr rhs, pure_expr*& e)
   else
     fptr->refc--;
   fptr = save_fptr;
-  if (!res) {
+  if (res) {
+    // Get rid of any old values now.
+    for (list<pure_expr*>::iterator it = cache.begin(), end = cache.end();
+	 it != end; ++it)
+      pure_free(*it);
+  } else {
     // We caught an exception, clean up the mess.
     for (env::const_iterator it = vars.begin(); it != vars.end(); ++it) {
       int32_t tag = it->first;
