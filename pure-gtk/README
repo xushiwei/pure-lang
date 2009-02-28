@@ -1,0 +1,36 @@
+Pure GTK+ Bindings
+==== ==== ========
+
+Please see the COPYING file for copyright information pertaining to this
+package. GTK+ itself is licensed under the GNU LGPL, see http://www.gtk.org.
+
+pure-gtk is a collection of bindings to use the GTK+ GUI toolkit version 2.x
+with Pure, see http://www.gtk.org. The bindings include the gtk (+gdk),
+glib, atk, cairo and pango libraries, each in their own Pure module.
+
+At present these are just straight 1-1 wrappers of the C libraries, created
+with pure-gen. So they still lack some convenience, but they are perfectly
+usable already, and a higher-level API for accessing all the functionality
+will hopefully become available in time. In fact *you* can help make that
+happen. :) So please let me know if you'd like to give a helping hand in
+improving pure-gtk.
+
+To install, do the usual 'make && sudo make install' (see the Makefile for
+further options). This needs Pure and the GTK header files and libraries.
+
+This release was prepared with GTK+ 2.14.4 on SUSE 11.1. If you're seeing a
+lot of warnings or even compilation errors when running 'make', your GTK
+headers are probably much different from these. In that case you should run
+'make generate' to regenerate the bindings; for this you also need to have
+pure-gen installed. (If you already have pure-gen then it's a good idea to do
+this anyway.)
+
+See examples/hello.pure for a basic example. The files uiexample.pure and
+uiexample.glade show how to run a GUI created with the Glade interface
+builder.
+
+pure-gtk can be discussed on the Pure mailing list at:
+http://groups.google.com/group/pure-lang
+
+Enjoy. :)
+Albert Graef <Dr.Graef at t-online.de>

@@ -1,7 +1,7 @@
 
 # Package name and version number:
 dist = pure-ffi-$(version)
-version = 0.3
+version = 0.4
 
 # Try to guess the installation prefix (this needs GNU make):
 prefix = $(patsubst %/bin/pure,%,$(shell which pure 2>/dev/null))
@@ -58,6 +58,22 @@ ffi$(DLL): ffi.c
 
 clean:
 	rm -f *$(DLL) *~ *.a *.o
+
+# documentation (this needs docutils)
+
+html: pure-ffi.html
+latex: pure-ffi.tex
+pdf: pure-ffi.pdf
+
+pure-ffi.html: README
+	rst2html.py $< $@
+
+pure-ffi.tex: README
+	rst2latex.py $< $@
+
+pure-ffi.pdf: pure-ffi.tex
+	pdflatex $<
+	rm -f *.aux *.log *.out
 
 install:
 	test -d "$(DESTDIR)$(libdir)/pure" || mkdir -p "$(DESTDIR)$(libdir)/pure"

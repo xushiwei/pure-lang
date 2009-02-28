@@ -16,12 +16,12 @@ import Language.C.Data.Ident
 import System
 
 main = 
-  getArgs >>= return.head >>= parseFile >>= return.dump >>= putStrLn
+  getArgs >>= parseFile >>= return.dump >>= putStrLn
 
-parseFile :: FilePath -> IO CTranslUnit
-parseFile header =
+parseFile :: [String] -> IO CTranslUnit
+parseFile args =
   do
-  parseResult <- parseCFile (newGCC "gcc") Nothing [] header
+  parseResult <- parseCFile (newGCC "gcc") Nothing (init args) (last args)
   case parseResult of 
     Left err -> error $ show err
     Right ast -> return $ ast
@@ -145,7 +145,10 @@ instance Dump CExtDecl where
   -- NOTE : The output deviates from the Language.C format here.  We add an
   -- extra argument to the CDeclExt constructor, which is the filename.
   dump (CFDefExt cFunDef)  = parens $ "CFDefExt "++ dump cFunDef
-  dump (CAsmExt cStrLit _) = parens $ "CAsmExt " ++ dump cStrLit
+  -- The version of CAsmExt in the repository has an additional second
+  -- argument. Uncomment this if needed.
+  --dump (CAsmExt cStrLit _) = parens $ "CAsmExt " ++ dump cStrLit
+  dump (CAsmExt cStrLit) = parens $ "CAsmExt " ++ dump cStrLit
 
 cDeclFile (CDecl _ _ nodeInfo) = "\"" ++ fileOfNode nodeInfo ++ "\""
 
@@ -773,7 +776,7 @@ instance Dump CBuiltin where
 
 instance Dump CConst where
   dump (CIntConst i _)   = parens $ "CIntConst "++show i
-  dump (CCharConst c _)  = parens $ "CCharConst "++show c
+  dump (CCharConst c _)  = parens $ "CCharConst "++show (getCChar c)
   dump (CFloatConst f _) = parens $ "CFloatConst "++show f
   dump (CStrConst s _)   = parens $ "CStrConst "++show s 
 

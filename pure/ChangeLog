@@ -1,3 +1,82 @@
+2009-02-23  Albert Graef  <Dr.Graef@t-online.de>
+
+	* runtime.cc (pure_symbol): Handle the case of a symbol bound to
+	an external. In this case we need to return the value or fbox
+	associated with the external rather than the value of the symbol
+	itself.
+
+2009-02-22  Albert Graef  <Dr.Graef@t-online.de>
+
+	* 0.18 release.
+
+	* interpreter.cc (varsubst): Eliminate unneeded macval calls.
+	(macred): Fix up deBruijn indices if a catch clause or thunk is
+	created during macro expansion. Fixes regression test030.pure.
+
+2009-02-16  Albert Graef  <Dr.Graef@t-online.de>
+
+	* parser.yy, interpreter.cc/hh: Permit 'public' and 'private'
+	before an 'extern' declaration.
+
+	* runtime.cc (mk_pair): Bugfix: Normalize tuples on the fly, so
+	that constant tuples in toplevel expressions are correctly
+	computed.
+
+	* lexer.ll: Bugfix: Keep track of line count in strings.
+
+2009-02-13  Albert Graef  <Dr.Graef@t-online.de>
+
+	* configure.ac: Bump version number. (Needs reconfigure.)
+
+	* pure.1.in: Removed, pure.1 isn't generated any more.
+
+	* lexer.ll: Reworked the lexical analyzer so that it doesn't use
+	REJECT any more. This improves performance and allows the input
+	buffer to be resized dynamically, so that the lexer doesn't choke
+	on big tokens.
+
+2009-02-12  Albert Graef  <Dr.Graef@t-online.de>
+
+	* lexer.ll: Add alternate forms of the 'show' command to list
+	current/search namespaces ('show namespace') as well as all
+	currently declared namespaces ('show namespaces').
+
+	* pure.cc, lexer.ll: Fix up completion routines so that namespaces
+	are taken into account.
+
+	* interpreter.cc (declare_extern): Strop external wrapper names
+	with namespace prefix, to avoid name collisions in assembler code.
+
+	* interpreter.cc (declare_extern), runtime.cc/h: Add automatic
+	conversions of matrices to short*, int*, float*, double* and void*
+	arguments in the C interface.
+
+2009-02-10  Albert Graef  <Dr.Graef@t-online.de>
+
+	* examples/spawn.pure: Added example showing the use of the argv
+	routines in conjunction with execvp.
+
+	* lib/strings.pure: Add convenience functions for dealing with
+	argv-like string vectors.
+
+	* Makefile.in (install): Avoid clobbering the install dir when
+	installing over an existing installation. This would remove all
+	installed modules when reinstalling a new Pure version which in
+	most cases is unneccessary and in fact rather annoying. If you
+	really need to clean out the installation directory, run 'make
+	uninstall' first.
+
+	* lib/primitives.pure: Moved malloc and friends from system.pure,
+	and added a convenience function to create cooked pointers which
+	take care of freeing themselves.
+
+2009-02-06  Albert Graef  <Dr.Graef@t-online.de>
+
+	* lib/getopt.pure: Added getopt module (ported from Q).
+
+	* interpreter.cc (varsubst): Fix a bug in the substitution of
+	macro parameters containing local bindings.
+
 2009-01-29  Albert Graef  <Dr.Graef@t-online.de>
 
 	* 0.17 release.
