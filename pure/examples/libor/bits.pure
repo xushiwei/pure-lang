@@ -1,0 +1,69 @@
+// Bit conversion and manipulation facilities for ints, bigints and lists
+// Libor Spacek (C) 28th June, 2009
+
+setbit i::int bit::int = i or (1<<bit);
+setbit i::bigint bit::int = i or (1L<<bit);
+
+setnbits i::int bit::int n::int = i if ((n < 1) || (bit < 0) || ((n+bit) > 31));
+setnbits i::int bit::int n::int = // sets n consecutive bits starting from bit
+	i or ((last (iteraten n (\x-> (x<<1) or 1) 1)) << bit);
+
+setnbits i::bigint bit::int n::int = i if ((n < 1) || (bit < 0)); 
+setnbits i::bigint bit::int n::int = // sets n consecutive bits from bit
+	i or ((last (iteraten n (\x-> (x<<1) or 1L) 1L)) << bit);
+	
+clearbit i::int bit::int = i and (not (1<<bit));
+clearbit i::bigint bit::int = (i and (not (1L<<bit)));
+
+getbit i::int bit::int | getbit i::bigint bit::int = (i>>bit) and 1;
+
+def setbit i bit = i or (1<<bit);
+def clearbit i bit = i and (not (1<<bit));
+def getbit i bit = (i>>bit) and 1;
+
+// conversions from and to little-endian lists of integers
+// any nonzero integer is interpreted as a set bit
+list2n l =  if ((#l) < 33) then (lti l 0) else (ltb l 0L)
+	with
+		lti [] j::int = j;
+		lti (0:t) 0 = lti t 0;
+		lti (h::int:t) 0 = lti t 1;
+		lti (0:t) j::int = lti t (j<<1);
+		lti (h::int:t) j::int = lti t ((j<<1)+1);
+
+		ltb [] j::bigint = j;
+		ltb (0:t) 0L = ltb t 0L;
+		ltb (h::int:t) 0L = ltb t 1L;
+		ltb (0:t) j::bigint = ltb t (j<<1);
+		ltb (h::int:t) j::bigint = ltb t ((j<<1)+1);
+	end;
+
+n2list i::int = itl i [] 
+	with
+		itl 0 l = l;
+		itl j::int l = if (j and 1) then itl (j>>1) (1:l) else itl (j>>1) (0:l);
+	end;
+
+n2list i::bigint = itl i [] 
+	with
+		itl 0L l = l;
+		itl j::bigint l = 
+			if (int (j and 1)) then itl (j>>1) (1:l) else itl (j>>1) (0:l);
+	end;
+
+/* direct modifications using pointers (refs to ints and bigints)
+refsetbit r::pointer bit::int = put r ((get r) or (1<<bit));
+refclearbit r::pointer bit::int = put r ((get r) and (not (1<<bit)));
+refgetbit r::pointer bit::int = ((get r) >> bit) and 1;
+
+r::pointer << bitsno::int = put r ((get r) << bitsno);
+r::pointer >> bitsno::int = put r ((get r) >> bitsno);
+
+def refsetbit r bit = put r ((get r) or (1<<bit));
+def refclearbit r bit = put r ((get r) and (not (1<<bit)));
+def refgetbit r bit = ((get r) >> bit) and 1;
+
+def r::pointer << bitsno = put r ((get r) << bitsno);
+def r::pointer >> bitsno = put r ((get r) >> bitsno);
+*/
+

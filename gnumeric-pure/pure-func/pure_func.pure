@@ -1,0 +1,269 @@
+
+using system;
+
+/* Gnumeric error values. */
+
+public gnm_error;
+
+/* Externals provided by the Pure plugin loader. To prevent name clashes,
+   these are all prefixed with 'pure_' in the plugin. For convenience, we
+   define some shorter Pure aliases below. */
+
+/* Calling Gnumeric functions and asynchronous processing. */
+
+extern expr* pure_gnmcall(char* name, expr* args) = call;
+extern expr* pure_datasource(expr* x) = datasource;
+extern expr* pure_trigger(int timeout, expr* cond, expr *val, expr *data)
+ = trigger;
+
+/* Basic cell inspection and manipulation operations. */
+
+extern expr* pure_parse_range(char* s) = parse_range;
+extern expr* pure_make_range(expr* x) = make_range;
+
+extern expr* pure_this_cell() = this_cell;
+extern expr* pure_get_cell(char* s) = get_cell;
+extern expr* pure_get_cell_text(char* s) = get_cell_text;
+extern expr* pure_get_cell_format(char* s) = get_cell_format;
+extern expr* pure_set_cell(char* s, expr *x) = set_cell;
+extern expr* pure_set_cell_text(char* s, expr *x) = set_cell_text;
+extern expr* pure_set_cell_format(char* s, expr *x) = set_cell_format;
+extern expr* pure_get_range(char* s) = get_range;
+extern expr* pure_get_range_text(char* s) = get_range_text;
+extern expr* pure_get_range_format(char* s) = get_range_format;
+extern expr* pure_set_range(char* s, expr *x) = set_range;
+extern expr* pure_set_range_text(char* s, expr *x) = set_range_text;
+extern expr* pure_set_range_format(char* s, expr *x) = set_range_format;
+
+/* Information about sheet objects (widgets). */
+
+extern expr* pure_sheet_objects() = sheet_objects;
+
+/* OpenGL support (requires GtkGLExt). */
+
+extern bool pure_check_window(char *name) = check_window;
+extern expr *pure_gl_window(char *name, int timeout,
+       	    		    expr *setup_cb, expr *config_cb,
+			    expr *display_cb, expr *timer_cb,
+			    expr *user_data) = gl_window;
+
+/* Helper function to collect the values in a list of scalars and ranges or
+   arrays in a single list. */
+
+ranges xs = cat [ case x of _::matrix = list x; _ = [x] end | x = xs ];
+
+/* Sample Pure functions to be called in Gnumeric. (These must match the
+   descriptions given at the end of the script.) */
+
+pure_hello []  = sprintf "Hi Gnumeric, this is Pure %s." version;
+pure_hello [s] = sprintf "Hi %s, this is Pure %s." (s,version);
+
+pure_max x y = max x y;
+pure_sum xs = foldl (+) 0 (ranges xs);
+pure_sums xs = scanl (+) 0 (ranges xs);
+
+pure_echo xs = str $ tuple xs;
+
+pure_eval (s::string:args) =
+  case eval (sprintf "'(%s)" s) of
+    y = eval (reduce y) with x = args end if null lasterr;
+    _ = gnm_error "#SYNTAX!";
+  end;
+
+/* The interactive Pure shell. This is a variation of pure_eval above, which
+   executes arbitrary Pure code and returns the last evaluated expression (if
+   any) as a string. It doesn't accept additional arguments, so you'll have to
+   use get_cell etc. if you need to access cell values. This is mainly
+   provided as a convenience to create an "interactive shell" which lets you
+   evaluate Pure code inside Gnumeric. To these ends, simply prepare a text
+   cell for entering the code to be evaluated, and then apply pure_shell on
+   this text cell in another cell to display the result. See the pure-examples
+   spreadsheet for an example. */
+
+pure_shell s::string =
+  case eval s of
+    y = str y if null lasterr;
+    _ = gnm_error lasterr;
+  end;
+
+/* This example shows how to call Gnumeric functions from Pure, using the
+   pure_gnmcall (a.k.a. 'call') external defined in the Pure plugin
+   loader. The arguments must be given as a list of Pure expressions which are
+   converted to Gnumeric values as usual. */
+
+gnm_bitand x y = call "bitand" [x,y];
+
+/* It is also possible to create external data sources using the
+   pure_datasource (a.k.a. 'datasource') external defined in the Pure plugin
+   loader. The argument to datasource is usually a thunk or a Pure stream
+   (lazy list), which is evaluated asynchronously in a separate process. The
+   resulting Pure values are fed back to Gnumeric as results of the datasource
+   call, as they become available. #N/A is returned when no result is
+   available yet. The following example shows how to use this function to
+   carry out a calculation wrapped up in a thunk. This works like pure_eval,
+   only that the evaluation actually happens in the background. */
+
+pure_calc (s::string:args) =
+  case eval (sprintf "'(%s)" s) of
+    y = datasource $ (eval (reduce y) with x = args end)& if null lasterr;
+    _ = gnm_error "#SYNTAX!";
+  end;
+
+/* Here's another example which counts off the seconds starting from a given
+   initial value. */
+
+pure_counter x = datasource [sleep (i>x) $$ i | i = x..inf];
+
+/* A complete calendar example. Please have a look at the calendar spreadsheet
+   in the distribution to see this example in action. NOTE: This requires the
+   date utilities in date.pure, included in the distribution. */
+
+using date;
+
+/* The actual computation of the calendar is done using the 'cal' function in
+   date.pure, here we only reformat the calendar nicely in three columns, one
+   for each quarter. */
+
+pure_cal y = matrix $ cat $ map (quarter c) (0..3)
+when c = map (vfill 10 7 . map (hfill 7) . cal y) (1..12) end
+with
+  quarter c i = zipwith (+) m1 $ zipwith (+) m2 m3
+    when [m1,m2,m3] = map month $ c!!(i*3..(i+1)*3-1) end;
+  month (r1:(m:_):_:r2:r) = ("":r1):(m:r2):map ("":) r;
+  hfill n xs = xs+["" | i = #xs..n-1];
+  vfill n m xs = xs+[hfill m [] | i = #xs..n-1];
+end when y = int y end;
+
+/* This example renders a little table with information about the graphic
+   objects and widgets in all sheets of the current workbook. The information
+   for each object consists of the sheet name, a short description of the type
+   of object, an associated text label if available (for image objects this is
+   the pointer to the image data), the associated cell link (for objects like
+   sliders and buttons which are linked to a cell value), and the pointer to
+   the widget (if any). See the widgets spreadsheet in the distribution for an
+   example. Note that the widget pointer is useful in particular for frame
+   widgets, since it allows you to add custom objects as children of the
+   frame, using Pure's Gtk interface. */
+
+/* This is a bit tricky to do since the widgets aren't realized yet when the
+   spreadsheet is loaded, thus we use the trigger macro to wait until this has
+   happened. */
+
+pure_objects = trigger 0 (\_->all realized sheet_objects)
+  (\_->matrix$map list sheet_objects) ()
+with realized (_,_,_,_,w) = ~listp w || ~null w && ~any null w end;
+
+/***************************************************************************/
+
+/* Gnumeric function descriptions. These are optional, but needed if you want
+   to tell Gnumeric about the parameters the function is to be invoked with,
+   and/or the help text to be displayed for the function.
+
+   To describe a given function to Gnumeric, you define gnm_info "<name>"
+   (where <name> is the name of the function) as a pair with the following
+   elements:
+
+   - The first element, a string, gives the signature of the function. E.g.,
+     "f" denotes a function taking a single float parameter, "fs" a function
+     taking a float and a string argument (in that order), etc. Optional
+     parameters can be indicated using '|', as in "ff|s" (two non-optional
+     floats, followed by an optional string). See the Gnumeric/Pure
+     documentation for a complete list of the supported parameter types.
+
+   - The second element is a list of hash pairs key=>text which together make
+     up the help text shown in Gnumeric's f(x) dialog. You should at least
+     specify the function name along with a short synopsis here, e.g.
+     GNM_FUNC_HELP_NAME => "frob:the frob function". Parameter descriptions
+     take the form GNM_FUNC_HELP_ARG => "x:integer". There are a number of
+     other useful elements, see the Gnumeric/Pure documentation for details.
+
+   Both the signature and the function description are optional. The signature
+   defaults to a variadic function which takes any number of parameters of any
+   type, and the description defaults to some boilerplate text which says that
+   the function hasn't been documented yet.
+
+   Note that if no signature is given, then the function accepts any number of
+   parameters of any type, so your function definition must be prepared to
+   handle that. In that case, or if there are optional parameters, the
+   function becomes variadic and the (optional) parameters are passed as a
+   Pure list (in addition to the non-optional parameters). */
+
+/* The format of the function descriptions is a bit unwieldy, so it's
+   convenient to construct them using this little helper function. */
+
+gnm_help name::string args descr::string notes examples see_also =
+  [GNM_FUNC_HELP_NAME		=> name] +
+  [GNM_FUNC_HELP_ARG		=> x | x::string = args ] +
+  [GNM_FUNC_HELP_DESCRIPTION	=> descr ] +
+  [GNM_FUNC_HELP_NOTE		=> x | x::string = notes ] +
+  [GNM_FUNC_HELP_EXAMPLES	=> x | x::string = examples ] +
+  (if null see_also then [] else
+   [GNM_FUNC_HELP_SEEALSO	=> join "," see_also]);
+
+gnm_info "pure_hello" = "|s", gnm_help "pure_hello:Welcome to Gnumeric/Pure!"
+ ["name:a string"]
+ "This function demonstrates the Gnumeric/Pure interface. The function takes an optional string parameter @{name}. It formats a little text and returns it as a string."
+ [sprintf "You're running Pure version %s (Gnumeric %s, Pure loader %s)."
+  (version,gnm_version,gnm_pure_version)]
+ ["=pure_hello()", "=pure_hello(\"Kilroy\")"] [];
+
+gnm_info "pure_max" = "ff", gnm_help "pure_max:maximum of two numbers"
+ ["x:number", "y:number"]
+ "Computes the maximum of two numbers @{x} and @{y}. This is an example of a function of fixed arity, where arguments are passed in curried form."
+ [] ["=pure_max(17,22)"] [];
+
+gnm_info "pure_sum" = gnm_help "pure_sum:sum of a collection of numbers" []
+ "Computes the sum of a collection of numbers, using Pure's foldl. Takes any number of scalars or ranges as parameters. This is an example of a variadic function, where arguments are passed as a Pure list."
+ [] ["=pure_sum(1,2,3,4,5,6)"] ["pure_sums"];
+
+gnm_info "pure_sums" = gnm_help "pure_sum:sums of a collection of numbers" []
+ "Computes the partial sums of a collection of numbers, using Pure's scanl. Takes any number of scalars or ranges as parameters. Returns a Pure list of the results, which becomes an array in Gnumeric land, so you'll have to enter this as an array function."
+ [] ["=pure_sums(1,2,3,4,5,6)"] ["pure_sum"];
+
+gnm_info "pure_echo" = gnm_help "pure_echo:echo all given arguments" []
+ "This simply echoes all given arguments as a string in Pure syntax, as Pure sees them. Useful for debugging purposes."
+ [] ["=pure_echo(4711,\"abc\")"] [];
+
+gnm_info "pure_eval" = gnm_help "pure_eval:evaluate a Pure expression"
+ ["s:string"]
+ "Evaluates a Pure expression, given as a string @{s}. Any remaining parameters are available in the evaluated code as a list x, so x!0 denotes the first argument, x!1 the second, etc. This lets you evaluate any Pure code in a spreadsheet without first having to define a function for it."
+ [] ["=pure_eval(\"foldl (*) 1 (1..10)\")","=pure_eval(\"x!0*x!1\",2,3)"]
+ ["pure_calc"];
+
+gnm_info "pure_shell" = "s", gnm_help
+ "pure_shell:the interactive Gnumeric/Pure shell"
+ ["s:string"]
+ "This is a variation of @{pure_eval} which executes arbitrary Pure code and returns the last evaluated expression (if any) as a string in Pure syntax. It doesn't accept additional arguments, so you'll have to use @{get_cell} etc. if you need to access cell values."
+ ["This is mainly provided as a convenience to build an interactive frontend to the Pure interpreter inside Gnumeric. To these ends, simply prepare a text cell for entering the code to be evaluated, and then apply pure_shell on this text cell in another cell to display the result. See the pure-examples spreadsheet for an example."]
+ ["=pure_shell(\"scanl1 (*) (1..10)\")"]
+ ["pure_eval"];
+
+gnm_info "gnm_bitand" = "ff", gnm_help "gnm_bitand:bitwise and"
+ ["x:non-negative integer","y:non-negative integer"]
+ "Computes the bitwise and of two numbers @{x} and @{y}, using the corresponding Gnumeric function. This example shows how to call Gnumeric functions from Pure."
+ [] ["=gnm_bitand(17,22)"] [];
+
+gnm_info "pure_calc" = gnm_help
+ "pure_calc:evaluate an expression asynchronously"
+ ["s:string"]
+ "pure_calc evaluates an expression with parameter substitution, like @{pure_eval}, but it uses an asynchronous data source to carry out the calculation as a background task."
+ [] ["pure_calc(\"foo\") executes @{foo} in the background."]
+ ["pure_eval","pure_counter"];
+
+gnm_info "pure_counter" = "f", gnm_help "pure_count:count off the seconds"
+ ["start:integer"]
+ "Counts off the seconds, beginning with the given @{start} value. This example demonstrates the use of an asynchronous data source which draws values from a Pure stream."
+ [] ["pure_counter(0) counts off the seconds from 0."] ["pure_calc"];
+
+gnm_info "pure_cal" = "f", gnm_help "pure_cal:calendar example"
+ ["y:integer (year)"]
+ "Computes a calendar for the given year @{y}."
+ ["This returns a 32x24 matrix, so you should select an appropriate range of cells and then enter this as an array formula. See the calendar spreadsheet in the Pure/Gnumeric distribution for a sample."]
+ ["pure_cal(2009) yields the calendar for 2009."] [];
+
+gnm_info "pure_objects" = "", gnm_help
+ "pure_objects:show information about sheet objects"
+ []
+ "Displays information about the graphic objects and widgets in the current sheet."
+ ["This returns a 4xn matrix, where n is the number of objects in the sheet, so it should be used as an array formula for an appropriate cell range. See the widgets spreadsheet in the Pure/Gnumeric distribution for a sample."]
+ ["pure_objects()"] [];

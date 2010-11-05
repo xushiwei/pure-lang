@@ -1,0 +1,17 @@
+
+/* Simple audio processing example. 'Bang' fills a Pd array, whose name is
+   given as the creation argument, with random samples, 'reset' clears it. */
+
+extern int pure_random() = random;
+randf = random/0x7fffffff;
+
+extern int pd_getbuffersize(char *name);
+extern void pd_setbuffer(char *name, expr* x);
+
+nonfix bang reset;
+
+randomwave name = 1,0,process with
+  process reset = pd_setbuffer name (dmatrix nsamples);
+  process bang  = pd_setbuffer name {randf | i = 1..nsamples};
+  nsamples      = pd_getbuffersize name;
+end;

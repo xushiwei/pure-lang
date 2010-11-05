@@ -1,0 +1,189 @@
+// Random distributions
+
+// NOTE: This test will fail if Pure was built without GSL support.
+
+using system;
+using gsl::randist;
+
+using namespace gsl::ran;
+
+/* Testing p.d.f. functions. */
+
+puts (str [
+  ugaussian_pdf  1.2,
+  gaussian_pdf  (-1.3)  1.5,
+  gaussian_tail_pdf  2  1  1.5,
+  ugaussian_tail_pdf  2  1,
+  bivariate_gaussian_pdf  1.2  0.9  1  1  0.95,
+  exponential_pdf  1  0.5,
+  laplace_pdf  1.5  2,
+  exppow_pdf  0  1  1.5,
+  cauchy_pdf  (-1)  1,
+  rayleigh_pdf  2.5  1,
+  rayleigh_tail_pdf  1.5  1  1,
+  landau_pdf  1.1,
+  gamma_pdf  1  1  1.5,
+  flat_pdf  1  0.5  2.5,
+  lognormal_pdf  0.01  0  1,
+  chisq_pdf  1  2,
+  fdist_pdf  0.5  3  2,
+  tdist_pdf  0  10,
+  beta_pdf  0.5  4  1,
+  logistic_pdf  (-1)  2,
+  pareto_pdf  2.01  3  2,
+  weibull_pdf  0.01  1  1,
+  gumbel1_pdf  0.01  1  1,
+  gumbel2_pdf  0.01  1  1,
+  dirichlet_pdf  {0.1, 0.2, 0.8}  {2.0, 2.0, 2.0},
+  dirichlet_lnpdf  {0.1, 0.2, 0.8}  {2.0, 2.0, 2.0},
+  poisson_pdf  4  0.4,
+  bernoulli_pdf  1  0.7,
+  binomial_pdf  3  0.5  9,
+  multinomial_pdf  {0.1, 0.2, 0.7}  {2, 2, 2},
+  multinomial_lnpdf  {0.1, 0.2, 0.7}  {2, 2, 2},
+  negative_binomial_pdf  10  0.5  3,
+  pascal_pdf  10  0.5  3,
+  geometric_pdf  5  0.4,
+  hypergeometric_pdf  1  5  20  3,
+  logarithmic_pdf  10  0.7]);
+
+/* Testing general discrete distributions. */
+
+test2
+  = v
+    when
+      px = discrete_preproc  {0.1, 0.3, 0.4};
+      v = discrete_pdf  0  px +
+          discrete_pdf  1  px +
+          discrete_pdf  2  px;
+      _ = discrete_free px
+    end;
+puts (str test2);
+
+/* Testing c.d.f. functions */
+
+using namespace gsl::cdf;
+
+puts (str [
+  ugaussian_P  (-1.3),
+  ugaussian_Q  (-1.3),
+  ugaussian_Pinv  0.84,
+  ugaussian_Qinv  0.84,
+  gaussian_P  (1.3)  1.5,
+  gaussian_Q  (1.3)  1.5,
+  gaussian_Pinv  0.4  5,
+  gaussian_Qinv  0 .4 5,
+  exponential_P  1  0.5,
+  exponential_Q  1  0.5,
+  exponential_Pinv  0.6  0.5,
+  exponential_Qinv  0.6  0.5,
+  laplace_P  1.5  2,
+  laplace_Q  1.5  2,
+  laplace_Pinv  0.6  2,
+  laplace_Qinv  0.4  2,
+  exppow_P  0  1  2.5,
+  exppow_Q  0  1  0.5,
+  cauchy_P  (-1)  1,
+  cauchy_Q  (-1)  1,
+  cauchy_Pinv  0.75  1,
+  cauchy_Qinv  0.25  1,
+  rayleigh_P  1.5  2,
+  rayleigh_Q  0.5  1,
+  rayleigh_Pinv  0.5  1,
+  rayleigh_Qinv  0.5  1,
+  gamma_P  1  1  3,
+  gamma_Q  1  1  3,
+  gamma_Pinv  0.5  1  1,
+  gamma_Qinv  0.5  1  1,
+  flat_P  2  1.2  4.8,
+  flat_Q  2  1.2  4.8,
+  flat_Pinv  0.2  0.5  2.5,
+  flat_Qinv  0.2  0.5  2.5,
+  lognormal_P  0.01  0  1,
+  lognormal_Q  0.01  0  1,
+  lognormal_Pinv  0.1  0  1,
+  lognormal_Qinv  0.1  0  1,
+  chisq_P  1  2,
+  chisq_Q  1  2,
+  chisq_Pinv  0.5  2,
+  chisq_Qinv  0.5  2,
+  fdist_P  1  3  2,
+  fdist_Q  1  3  2,
+  fdist_Pinv  0.5  3  2,
+  fdist_Qinv  0.5  3  2,
+  tdist_P  2.1  10,
+  tdist_Q  (-2.1)  10,
+  tdist_Pinv  0.68  10,
+  tdist_Qinv  0.68  10,
+  beta_P  0.75  2  2,
+  beta_Q  0.75  2  2,
+  beta_Pinv  0.75  2  2,
+  beta_Qinv  0.25  2  2,
+  logistic_P  (-1)  2,
+  logistic_Q  (-1)  2,
+  logistic_Pinv  0.75  1,
+  logistic_Qinv  0.25  1,
+  pareto_P  2.01  3  2,
+  pareto_Q  2.01  3  2,
+  pareto_Pinv  0.1  3  2,
+  pareto_Qinv  0.1  3  2,
+  weibull_P  1.01  1  2,
+  weibull_Q  1.01  2  3,
+  weibull_Pinv  0.1  1  2,
+  weibull_Qinv  0.1  1  2,
+  gumbel1_P  1.01  1  1,
+  gumbel1_Q  1.01  1  1,
+  gumbel1_Pinv  0.1  1  1,
+  gumbel1_Qinv  0.1  1  1,
+  gumbel2_P  1.01  1  1,
+  gumbel2_Q  1.01  1  1,
+  gumbel2_Pinv  0.1  1  1,
+  gumbel2_Qinv  0.1  1  1,
+  poisson_P  4  0.4,
+  poisson_Q  4  0.6,
+  binomial_P  3  0.5  10,
+  binomial_Q  3  0.5  10,
+  negative_binomial_P  10  0.5  3,
+  negative_binomial_Q  10  0.5  3,
+  pascal_P  10  0.5  3,
+  pascal_Q  10  0.5  3,
+  geometric_P  5  0.4,
+  geometric_Q  5  0.6,
+  hypergeometric_P 1  5  20  3,
+  hypergeometric_Q  1  5  20  3]);
+
+/* Testing statistics functions. */
+
+using gsl::stats;
+using namespace gsl::stats;
+
+let data = {1.0,1.3,1.6,1.6,2.1,2.4,2.4,3.0};
+
+puts (str [
+  mean  {1,2,3,4,5},
+  variance  {1,2,3,4,5},
+  variance_m  {1,2,3,4,5}  4,
+  sd  {1,2,3,4,5},
+  sd_m  {1,2,3,4,5}  4,
+  tss  {1,2,3,4,5},
+  tss_m  {1,2,3,4,5}  4,
+  absdev  {2,2,3,4,4},
+  absdev_m  {2,2,3,4,4}  4,
+  skew  {1,1,1,1,2,2,2,2,2,2,2,2,3,30},
+  skew_m_sd  {1,2,2,3,3,3,3,3,3,3,4,4,5}  3  1,
+  kurtosis  {1,2,2,3,3,3,3,3,3,3,4,4,5},
+  kurtosis_m_sd  {1,2,2,3,3,3,3,3,3,3,4,4,5}  3  1,
+  lag1_autocorrelation  {1,2,3,4,5},
+  lag1_autocorrelation  {1,2,3,4,5}  2.5,
+  covariance  {1,2,3,4,5}  {3.0,4.5,6.0,7.5,9.0},
+  covariance_m  {1,2,3,4,5}  {3.0,4.5,6.0,7.5,9.0}  3  6,
+  wmean  {0.4,0.2,0.3,0.3,0.3}  {2,3,4,5,6},
+  correlation  {1,2,3,4,5}  {3.0,4.5,6.0,7.5,9.0},
+  median_from_sorted_data data,
+  quantile_from_sorted_data data  0.25, // lower quartile
+  min  {9,4,2,1,9},
+  max  {9.1,4.2,2.6,1.1,9.2},
+  minmax  {9.0,4.0,2.0,1.0,9.0},
+  min_index  {9.1,4.2,2.6,1.1,9.2},
+  max_index {9,4,2,1,9},
+  minmax_index {9,4,2,1,0,9}]);
