@@ -1,0 +1,235 @@
+
+/* gsl/fit.pure: GSL wrapper for the Pure programming language. */
+
+/* Copyright (c) 2008 by Albert Graef <Dr.Graef@t-online.de>.
+   Copyright (c) 2008 by Robert E. Rucker <erucker@bmc.edu>.
+
+   This file is part of the Pure programming language and system.
+
+   Pure is free software: you can redistribute it and/or modify it under the
+   terms of the GNU General Public License as published by the Free Software
+   Foundation, either version 3 of the License, or (at your option) any later
+   version.
+
+   Pure is distributed in the hope that it will be useful, but WITHOUT ANY
+   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+   FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+   details.
+
+   You should have received a copy of the GNU General Public License along
+   with this program.  If not, see <http://www.gnu.org/licenses/>. */
+
+/* ..
+   
+   Least-Squares Fitting
+   ---------------------
+   
+   This module is loaded via the command ``using gsl::fit`` and provides Pure
+   wrappers for the GSL least-squares fitting routines found in Chapter 36 of
+   the GSL manual,
+   
+   http://www.gnu.org/software/gsl/manual/html_node/Least_002dSquares-Fitting.html.
+   
+   Routines
+   ~~~~~~~~ */
+
+using common;
+
+namespace gsl;
+namespace gsl::fit;
+
+public
+  GSL_PREC_DOUBLE
+  GSL_PREC_SINGLE
+  GSL_PREC_APPROX;
+
+private extern expr* wrap_gsl_fit_linear(double*, double*, size_t);
+private extern expr* wrap_gsl_fit_wlinear(double*, double*, double*, size_t);
+private extern expr* wrap_gsl_fit_linear_est(double, double, double, double,
+					     double, double);
+
+public
+  linear
+  wlinear
+  linear_est;
+
+/* .. _linear:
+
+   ``linear  x::matrix  y::matrix``
+     implements ``gsl_fit_linear`` without the ``xstride``, ``ystride``, 
+     and ``n`` parameters. Results are returned as a list 
+     ``[c0, c1, cov00, cov01, cov11, sumsq]``.
+     
+   .. _wlinear:
+   
+   ``wlinear  x::matrix  w::matrix  y::matrix``
+     implements ``gsl_fit_wlinear`` without the ``xstride``, ``wstride``,
+     ``ystride``, and ``n`` parameters. Results are given as a list
+     ``[c0, c1, cov00, cov01, cov11, chisq]``.
+     
+   .. _linear_est:
+   
+   ``linear_est  x  c0::double  c1::double  cov00::double  cov01::double  cov11::double``
+     implements ``gsl_fit_linear_est``. Results are returned as a list
+     ``[y, y_err]``.
+*/
+
+private validmatrixp;
+def validmatrixp x
+  = rowvectorp x && (imatrixp x || dmatrixp x);
+
+linear  x::matrix  y::matrix
+  = wrap_gsl_fit_linear (dmatrix x) (dmatrix y) (#x)
+    if validmatrixp x && validmatrixp y && #x == #y;
+
+wlinear  x::matrix  w::matrix  y::matrix
+  = wrap_gsl_fit_wlinear (dmatrix x) (dmatrix w) (dmatrix y) (#x)
+    if validmatrixp x && validmatrixp y && validmatrixp w
+      && #x == #y && #x == #w;
+
+linear_est  x  c0::double  c1::double
+                cov00::double  cov01::double  cov11::double
+  = wrap_gsl_fit_linear_est (double x) c0 c1 cov00 cov01 cov11
+    if realp x;
+
+private extern expr* wrap_gsl_fit_mul(double*, double*, size_t);
+private extern expr* wrap_gsl_fit_wmul(double*, double*, double*, size_t);
+private extern expr* wrap_gsl_fit_mul_est(double, double, double);
+
+public
+  mul
+  wmul
+  mul_est;
+
+/* .. _mul:
+
+   ``mul  x::matrix  y::matrix``
+     implements ``gsl_fit_mul`` omitting the parameters ``xstride``, 
+     ``ystride``, and ``n``. Results are returned as a list 
+     ``[c1, cov11, sumsq]``.
+   
+   .. _wmul:
+   
+   ``wmul  x::matrix  w::matrix  y::matrix``
+     implements ``gsl_fit_wmul`` omitting the parametrs ``xstride``,
+     ``ystride``, and ``n``. Results are returned as a list 
+     ``[c1, cov11, sumsq]``.
+     
+   .. _mul_est:
+   
+   ``mul_est  x  c1::double  cov11::double``
+     implements ``gsl_fit_mul_est``. Results are returned as a list
+     ``[y, y_err]``.
+*/
+
+mul  x::matrix  y::matrix
+  = wrap_gsl_fit_mul (dmatrix x) (dmatrix y) (#x)
+    if validmatrixp x && validmatrixp y && #x == #y;
+
+wmul  x::matrix  w::matrix  y::matrix
+  = wrap_gsl_fit_wmul (dmatrix x) (dmatrix w) (dmatrix y) (#x)
+    if validmatrixp x && validmatrixp y && validmatrixp w
+      && #x == #y && #x == #w;
+
+mul_est  x  c1::double  cov11::double
+  = wrap_gsl_fit_mul_est (double x) c1 cov11
+    if realp x;
+
+private extern expr* wrap_gsl_multifit_linear(dmatrix*, dmatrix*);
+
+public
+  multifit_linear;
+
+/* This one is not ready for consumption yet */
+multifit_linear  x::matrix  y::matrix
+  = wrap_gsl_multifit_linear (dmatrix x) (dmatrix y);
+
+/* ..
+   
+   Examples
+   ~~~~~~~~
+   
+   Usage of each implemented library routine is illustrated below.
+   
+   ::
+   
+     > using gsl::fit;
+     > using namespace gsl::fit;
+     
+   The following code determines the equation for the least-squares line
+   through the points (1,0.01), (2,1.11), (3,1.9), (4,2.85), and (5,4.01).
+   
+   ::
+     
+     > Y x = '(a + b * x)
+     > when
+     >   a:b:_ = linear {1,2,3,4,5} {0.01,1.11,1.9,2.85,4.01}
+     > end;
+     > Y x;
+     -0.946+0.974*x
+     > eval $ Y 2;
+     1.002
+     
+   The following code illustrates estimating y-values without
+   constructing an equation for the least-squares line determined by
+   the points ``{x1,x2,x3,...,xn}``, ``{y1,y2,y3,...,yn}``. Here we
+   estimate the `y`-value at `x` = 1, `x` = 2, and `x` = 3. Compare the output
+   above at `x` = 2 to the output at `x` = 2 below.
+   
+   ::
+     
+     > let c0:c1:cov00:cov01:cov11:_ = linear {1,2,3,4,5}
+     >   {0.01,1.11,1.9,2.85,4.01};
+     > linear_est 1 c0 c1 cov00 cov01 cov11;
+     [0.028,0.0838570211729465]
+     > linear_est 2 c0 c1 cov00 cov01 cov11;
+     [1.002,0.0592958683214944]
+     > linear_est 3 c0 c1 cov00 cov01 cov11;
+     [1.976,0.0484148737476408]
+
+   Next, we determine a least-squares line through the points (1,0.01), 
+   (2,1.11), (3,1.9), (4,2.85), and (5,4.01) using weights 0.1, 0.2, 0.3, 
+   0.4, and 0.5.
+   
+   ::
+     
+     > W x = '(a + b * x)
+     > when
+     >   a:b:_ = wlinear (matrix (1..5)) 
+     >           {0.1, 0.2, 0.3, 0.4, 0.5}
+     >           {0.01, 1.11, 1.9, 2.85, 4.01};
+     > end;
+     > W u;
+     -0.99+0.986*u
+     > eval $ W 2;
+     0.982
+     
+   The least-squares slope for ``Y = c1 * X`` using the points (1,3), 
+   (2,5), and (3,7) is calculated below. Also, the `y`-values and 
+   standard error about `x` = 1, 2, and 3 are given.
+   
+   ::
+   
+     > let c1:cov11:sumsq:_ = mul {1,2,3} {3,5,7};
+     > mul_est 1 c1 cov11;
+     [2.42857142857143,0.123717914826348]
+     > mul_est 2 c1 cov11;
+     [4.85714285714286,0.247435829652697]
+     > mul_est 3 c1 cov11;
+     [7.28571428571428,0.371153744479045]
+     
+   The least-squares slope for ``Y = c1 * X`` using the points (1,3),
+   (2,5), and (3,7), and weights 0.4, 0.9, and 0.4 is calculated below. 
+   The approximation of y-values and standard error about `x` = 1, 2, and
+   3 follows.
+
+   ::
+   
+     > let c1:cov11:sumsq:_ = wmul {1,2,3} {0.4,0.9,0.4} {3,5,7};
+     > mul_est 1 c1 cov11;
+     [2.44736842105263,0.362738125055006]
+     > mul_est 2 c1 cov11;
+     [4.89473684210526,0.725476250110012]
+     > mul_est 3 c1 cov11;
+     [7.34210526315789,1.08821437516502]
+*/

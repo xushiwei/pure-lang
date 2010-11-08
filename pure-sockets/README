@@ -1,0 +1,281 @@
+
+====================================
+pure-sockets: Pure Sockets Interface
+====================================
+
+Albert Gräf <Dr.Graef@t-online.de>
+
+This is an interface to the Berkeley socket functions. It provides most of the
+core functionality, so you can create sockets for both stream and datagram
+based protocols and use these to transmit messages. Unix-style file sockets
+are also available if the host system supports them.
+
+Installation
+============
+
+This package uses Pure's new bitcode loader to ease porting, so you'll need
+Pure 0.45 or later and an LLVM-based C compiler installed. The Makefile is set
+up for clang (http://clang.llvm.org/) by default, because it's easier to
+install, but you can also use llvm-gcc if you set the CC make variable
+accordingly.
+
+For clang compilation, do the usual ``make && sudo make install`` and you
+should be set. To use llvm-gcc, replace ``make`` with ``make CC=llvm-gcc``.
+You can also set custom compilation options with the CFLAGS variable, e.g.:
+``make CFLAGS=-O3``.
+
+To uninstall the module, use ``sudo make uninstall``. There are a number of
+other targets (mostly for maintainers), please see the Makefile for details.
+
+Usage
+=====
+
+To use the operations of this module, put the following in your Pure script::
+
+  using sockets;
+
+NOTE: On some systems you may also have to pull in a special system library to
+get the socket functions. E.g.::
+
+  using "lib:wsock32", sockets;
+
+With the ``sockets`` module loaded, all the standard socket functions are
+available and work pretty much like in C. The only real difference is that,
+for convenience, functions taking socket addresses as parameters
+(``struct_sockaddr*`` pointers in Pure), are called without the ``addrlen``
+parameter; the size of the socket address structure will be inferred
+automatically and passed to the underlying C functions. Also, there are some
+convenience functions which act as wrappers around ``getaddrinfo`` and
+``getnameinfo`` to create socket addresses from symbolic information (hostname
+or ip, port names or numbers) and return information about existing address
+pointers, see `Creating and Inspecting Socket Addresses`_ below.
+
+Below is a list of the provided functions. Please see the corresponding manual
+pages for details, and check the Pure scripts in the examples subdirectory for
+some examples.
+
+Creating and Inspecting Socket Addresses
+----------------------------------------
+
+These functions are Pure-specific. The created socket addresses are
+``malloc``'ed and free themselves automatically when garbage-collected.
+
+``struct_sockaddr *sockaddr();``
+
+    Create a pointer to an empty socket address suitable to hold the socket
+    address result of routines like ``accept``, ``getsockname``, ``recvfrom``,
+    etc. which return a socket address.
+
+``struct_sockaddr *sockaddr([int family,] char *path);``
+
+    Create a local (a.k.a. file) socket for the given pathname. The ``family``
+    parameter, if specified, must be ``AF_UNIX`` here. Please note that
+    ``AF_UNIX`` is not supported on all platforms. You can check for this by
+    testing the ``HAVE_AF_UNIX`` constant, which is a truth value specifying
+    whether ``AF_UNIX`` is available on your system.
+
+``struct_sockaddr *sockaddr([int family,] char *host, char *port);``
+
+``struct_sockaddr *sockaddr([int family,] char *host, int port);``
+
+    This uses ``getaddrinfo`` to retrieve an ``AF_INET`` or ``AF_INET6``
+    address for the given hostname (or numeric IP address in string form) and
+    port (specified either as an int or a string). If ``family`` is omitted,
+    it defaults to ``AF_UNSPEC`` which matches both ``AF_INET`` and
+    ``AF_INET6`` addresses.
+
+``struct_sockaddr *sockaddrs([int family,] char *host, char *port);``
+
+``struct_sockaddr *sockaddrs([int family,] char *host, int port);``
+
+    This works like ``sockaddr`` above, but returns a list with *all* matching
+    addresses.
+
+``int sockaddr_family(struct_sockaddr *addr);``
+
+    Returns the address family of the given address.
+
+``char *sockaddr_path(struct_sockaddr *addr);``
+
+    Returns the pathname for ``AF_UNIX`` addresses.
+
+``char *sockaddr_hostname(struct_sockaddr *addr);``
+
+    Returns the hostname if available, the IP address otherwise.
+
+``char *sockaddr_ip(struct_sockaddr *addr);``
+
+    Returns the IP address.
+
+``char *sockaddr_service(struct_sockaddr *addr);``
+
+    Returns the service (a.k.a. port) name.
+
+``int sockaddr_port(struct_sockaddr *addr);``
+
+    Returns the port number.
+
+``expr *sockaddr_info(struct_sockaddr *addr);``
+
+    Returns a readable description of a socket address, as a
+    ``(family,hostname,port)`` tuple. You should be able to pass this into
+    ``sockaddr`` again to get the original address.
+
+Creating and Closing Sockets
+----------------------------
+
+``int socket(int domain, int type, int protocol);``
+
+    Creates a socket for the given protocol family (``AF_UNIX``, ``AF_INET``
+    or ``AF_INET6``), socket type (``SOCK_STREAM``, ``SOCK_DGRAM``, etc.) and
+    protocol. Note that on Linux we also support the ``SOCK_NONBLOCK``
+    (non-blocking) and ``SOCK_CLOEXEC`` (close-on-exec) flags which can be
+    or'ed with the socket type to get sockets with the corresponding
+    features. The protocol number is usually 0, denoting the default protocol,
+    but it can also be any of the prescribed ``IPPROTO`` constants (a few
+    common ones are predefined by this module, try ``show -g IPPROTO_*`` for a
+    list of those).
+
+``int socketpair(int domain, int type, int protocol, int *sv);``
+
+    Create a pair of sockets. The descriptors are returned in the integer
+    vector passed in the last argument.
+
+``int shutdown(int fd, int how);``
+
+  Perform shutdown on a socket. The second argument should be one of
+  ``SHUT_RD``, ``SHUT_WR`` and ``SHUT_RDWR``.
+
+``closesocket(int fd);``
+
+  This is provided for Windows compatibility. On POSIX systems this is just
+  ``close``.
+
+Establishing Connections
+------------------------
+
+``int accept(int sockfd, struct_sockaddr *addr);``
+
+``int bind(int sockfd, struct_sockaddr *addr);``
+
+``int connect(int sockfd, struct_sockaddr *addr);``
+
+``int listen(int sockfd, int backlog);``
+
+Socket I/O
+----------
+
+``size_t recv(int fd, void *buf, size_t len, int flags);``
+
+``size_t send(int fd, void *buf, size_t len, int flags);``
+
+``size_t recvfrom(int fd, void *buf, size_t len, int flags, struct_sockaddr *addr);``
+
+``size_t sendto(int fd, void *buf, size_t len, int flags, struct_sockaddr *addr);``
+
+The usual ``send``/``recv`` flags specified by POSIX (``MSG_EOR``,
+``MSG_OOB``, ``MSG_PEEK``, ``MSG_WAITALL``) are provided. On Linux we also
+support ``MSG_DONTWAIT``. Note that on POSIX systems you can also just
+``fdopen`` the socket descriptor and use the standard file I/O operations from
+the ``system`` module instead.
+
+Socket Information
+------------------
+
+``int getsockname(int fd, struct_sockaddr *addr);``
+
+``int getpeername(int fd, struct_sockaddr *addr);``
+
+``int getsockopt(int fd, int level, int name, void *val, int *len);``
+
+``int setsockopt(int fd, int level, int name, void *val, int len);``
+
+For ``getsockopt`` and ``setsockopt``, currently only the ``SOL_SOCKET`` level
+is defined (``level`` argument) along with the available POSIX socket options
+(``name`` argument). Try ``show -g SO_*`` to get a list of those. Also note
+that for most socket level options the ``val`` argument is actually an
+``int*``, so you can pass a Pure int vector (with ``len = SIZEOF_INT``) for
+that parameter.
+
+Example
+=======
+
+Here is a fairly minimal example using Unix stream sockets. To keep things
+simple, this does no error checking whatsoever and just keeps sending strings
+back and forth. More elaborate examples can be found in the examples directory
+in the sources.
+
+::
+
+  using sockets, system;
+
+  const path = "server_socket";
+  extern int unlink(char *name);
+
+  server = loop with
+    loop = loop if ~null s && ~response fp s when
+      // Connect to a client.
+      cfd = accept fd $ sockaddr ();
+      // Open the client socket as a FILE* and read a request.
+      fp = fdopen cfd "r+"; s = fgets fp;
+    end;
+    loop = puts "server is exiting" $$ closesocket fd $$
+           unlink path $$ () otherwise;
+    response fp s::string = s=="quit\n" when
+      // Process the request. (Here we just print the received
+      // message and echo it back to the client.)
+      printf "server> %s" s;
+      fputs s fp;
+    end;
+  end when
+    // Create the server socket and start listening.
+    unlink path;
+    fd = socket AF_UNIX SOCK_STREAM 0;
+    bind fd (sockaddr path); listen fd 5;
+    printf "server listening at '%s'\n" path;
+  end;
+
+  client = loop with
+    // Keep reading requests from stdin.
+    loop = loop if ~null s && ~request s when
+      fputs "client> " stdout; s = fgets stdin;
+    end;
+    loop = puts "client is exiting" $$ () otherwise;
+    request s::string = s=="quit\n" when
+      fd = socket AF_UNIX SOCK_STREAM 0;
+      connect fd (sockaddr path);
+      // Send the request to the server.
+      fp = fdopen fd "r+"; fputs s fp;
+      // Get the reply.
+      s = fgets fp;
+    end;
+  end;
+
+To use this example, run the ``server`` function in one instance of the Pure
+interpreter and the ``client`` function in another. Enter a line when the
+client prompts you for input; it will be printed by the server. Behind the
+scenes, the server also sends the line back to the client. After receiving the
+reply, the client prompts for the next input line. Entering end-of-file at the
+client prompt terminates the client but keeps the server running, so that you
+can start another client and reconnect to the server. Entering just ``quit``
+in the client terminates both server and client. Here is how a typical
+interaction may look like::
+
+  > client;
+  client> 1+1
+  client> foo bar
+  client> quit
+  client is exiting
+  ()
+
+  > server;
+  server listening at 'server_socket'
+  server> 1+1
+  server> foo bar
+  server> quit
+  server is exiting
+  ()
+
+Note that while the server processes requests sequentially, it accepts
+connections from a new client after each request, so that you can run as many
+clients as you like.
