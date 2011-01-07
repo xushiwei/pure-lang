@@ -1,0 +1,1308 @@
+;;; pure-mode.el --- as simple Pure mode -*- Emacs-Lisp -*-
+
+;; Author/Maintainer: Albert Graef <Dr.Graef@t-online.de>
+
+;; Distributed under GPL V3 (or later; see the accompanying COPYING file).
+
+;; INSTALLATION: If necessary, edit the values of the `pure-prog' and
+;; `pure-libdir' variables below. This usually isn't necessary if the PURELIB
+;; environment variable is set.
+
+(defvar pure-prog "@bindir@/pure")
+(defvar pure-libdir "@libdir@/pure")
+
+;; Then copy this file to your site-lisp directory. The easiest way to make
+;; Pure mode available in emacs is to add the following to your emacs startup
+;; file:
+
+;; (require 'pure-mode)
+
+;; To enable Pure mode for *.pure and *.purerc files, add the following to
+;; your emacs startup file:
+
+;; (setq auto-mode-alist
+;;       (cons '("\\.pure\\(rc\\)?$" . pure-mode) auto-mode-alist))
+
+;; Furthermore, you can enable font lock (syntax highlighting) as follows:
+
+;; (add-hook 'pure-mode-hook 'turn-on-font-lock)
+;; (add-hook 'pure-eval-mode-hook 'turn-on-font-lock)
+
+;; Well, that's the way it works with XEmacs and newer GNU Emacs versions. For
+;; older versions of GNU Emacs you might have to try something like:
+
+;; (global-font-lock-mode t)
+;; (add-hook 'pure-mode-hook (lambda () (font-lock-mode 1)))
+;; (add-hook 'pure-eval-mode-hook (lambda () (font-lock-mode 1)))
+
+;; Using the Pure-Eval hook you can also rebind the cursor up and down keys to
+;; the history cycling commands:
+
+;; (add-hook 'pure-eval-mode-hook
+;;	   (lambda ()
+;;	     (define-key pure-eval-mode-map [up] 'comint-previous-input)
+;;	     (define-key pure-eval-mode-map [down] 'comint-next-input)))
+
+;; Finally, you might wish to add some convenient global key bindings, e.g.:
+
+;; (global-set-key "\C-c\M-p" 'run-pure)
+;; (global-set-key "\C-x\M-p" 'pure-scratchpad)
+;; (global-set-key "\C-h\M-p" 'pure-help)
+
+;; Note that in Pure and Pure-Eval mode the online help facility is already
+;; bound to C-c C-h, and also available from the Pure menu. Please use this
+;; instead of the Pure interpreter's 'help' command, which will try to run w3m
+;; which won't work in an Emacs comint buffer.
+
+;; The online help facility uses emacs-w3m to display help files in html
+;; format, if it is installed and loaded. To these ends, add the following to
+;; your .emacs:
+
+;; (require 'w3m-load)
+
+;; Otherwise Emacs' generic browse-url function will be used, which usually
+;; invokes some external browser by default.
+
+;; --------------------------------------------------------------------------
+
+;; Try to figure out where interpreter and standard library are located. This
+;; relies on the PURELIB environment variable being set correctly.
+
+(let ((libpath (getenv "PURELIB")) (path (getenv "PATH")))
+  (if libpath
+      (let* ((prefix1 (file-name-directory libpath))
+	     (prefix2 (file-name-directory (directory-file-name prefix1)))
+	     ;; On most systems the interpreter is located in ../../bin.
+	     (exepath1 (concat prefix2 "bin/pure"))
+	     ;; Windows/Msys:
+	     (exepath2 (concat prefix2 "bin/pure.exe"))
+	     ;; Windows (Pure MSI package):
+	     (exepath3 (concat prefix1 "pure.exe"))
+	     (exepath
+	      (cond
+	       ((file-exists-p exepath1) exepath1)
+	       ((file-exists-p exepath2) exepath2)
+	       ((file-exists-p exepath3) exepath3)
+	       (t exepath1))))
+	(setq pure-prog exepath)
+	(setq pure-libdir libpath)
+	))
+  ;; If we haven't found the executable yet, try to locate it on PATH.
+  (unless (or (file-exists-p pure-prog) (null path))
+    (let ((exe1 (locate-library "pure" t (parse-colon-path path)))
+	  (exe2 (locate-library "pure.exe" t (parse-colon-path path))))
+      (cond
+       (exe1 (setq pure-prog exe1))
+       (exe2 (setq pure-prog exe2))
+       )))
+  )
+
+;; List of additional directories to search for imported scripts.
+
+(defvar pure-includes
+  (let ((path (getenv "PURE_INCLUDE")))
+    (if path
+	(setq pure-includes (parse-colon-path path))
+      nil))
+  "List of additional directories to search for imported scripts.")
+
+(defvar pure-font-lock-keywords
+  (list
+   (list "^#!.*" 0 'font-lock-comment-face t)
+   (list "\\<\\(bigint\\|bool\\|char\\|float\\|double\\|expr\\|short\\|int\\(8\\|16\\|32\\|64\\)?\\|long\\|string\\|pointer\\|void\\|[dci]?matrix\\)\\>" 1 'font-lock-type-face)
+   (list "\\<\\(catch\\|throw\\)\\>" 0 'font-lock-builtin-face)
+   (list
+    (concat "\\<\\("
+	    "case\\|const\\|def\\|e\\(lse\\|nd\\|xtern\\)\\|i\\(f\\|nfix[lr]?\\)\\|"
+	    "let\\|n\\(amespace\\|onfix\\)\\|o\\(f\\|therwise\\|utfix\\)\\|p\\(r\\(efix\\|ivate\\)\\|ostfix\\|ublic\\)\\|"
+	    "then\\|using\\|w\\(hen\\|ith\\)"
+	    "\\)\\>")
+    0 'font-lock-keyword-face))
+  "Rules for fontifying Pure scripts.")
+
+(defvar pure-mode-map nil)
+(cond ((not pure-mode-map)
+       (setq pure-mode-map (make-sparse-keymap))
+       (define-key pure-mode-map "\C-c\C-h" 'pure-help)
+       (define-key pure-mode-map "\e "      'pure-complete-symbol)
+       (define-key pure-mode-map "\C-c\C-c" 'pure-run-script)
+       (define-key pure-mode-map "\C-c\C-d" 'pure-debug-script)
+       (define-key pure-mode-map "\C-c\M-t" 'pure-make-tags)
+       (define-key pure-mode-map "\C-c\C-u" 'pure-current-msg)
+       (define-key pure-mode-map "\C-c\C-n" 'pure-next-msg)
+       (define-key pure-mode-map "\C-c\C-p" 'pure-prev-msg)
+       (define-key pure-mode-map "\C-c\C-e" 'pure-last-msg)
+       (define-key pure-mode-map "\C-c\C-a" 'pure-first-msg)
+       (define-key pure-mode-map "\C-c\C-f" 'pure-find-script)
+       (define-key pure-mode-map "\C-c\C-v" 'pure-goto-input-line)
+       (define-key pure-mode-map "\C-c\C-l" 'pure-send-line)
+       (define-key pure-mode-map "\C-c\C-r" 'pure-send-region)
+       (define-key pure-mode-map "\C-c\M-h" 'pure-show)
+       (define-key pure-mode-map "\C-c\M-c" 'pure-clear)
+    ))
+
+(defsubst pure-region-is-active-p ()
+  ;; Return t when the region is active.  The determination of region
+  ;; activeness is different in both Emacs and XEmacs.
+  (cond
+   ;; XEmacs
+   ((and (fboundp 'region-active-p)
+	 zmacs-regions)
+    (region-active-p))
+   ;; Emacs
+   ((boundp 'mark-active) mark-active)
+   ;; fallback; shouldn't get here
+   (t (mark t))))
+
+(defvar pure-mode-menu
+  (list "Pure"
+	["Pure Help..."			pure-help t]
+	["Describe Pure Mode"		describe-mode t]
+	["Customize"			(customize-group 'pure) t]
+	"-"
+	["Comment Out Region"		comment-region (pure-region-is-active-p)]
+	["Uncomment Region"		uncomment-region (pure-region-is-active-p)]
+	["Fill Comment Paragraph"	fill-paragraph t]
+	["Complete Symbol"		pure-complete-symbol t]
+	"-"
+	["Make Tags"			pure-make-tags t]
+	"-"
+	["Run Script"			pure-run-script t]
+	["Debug Script"			pure-debug-script t]
+	["Find Main Script"		pure-find-script pure-last-script]
+	["Goto Input Line"		pure-goto-input-line
+					(get-process "pure-eval")]
+	["Scratchpad"			pure-scratchpad t]
+	"-"
+	["Send Current Line"		pure-send-line t]
+	["Send Region"			pure-send-region t]
+	["Show Symbol..."		pure-show t]
+	["Clear Symbol..."		pure-clear t]
+	"-"
+	["Current Message"		pure-current-msg
+					(get-buffer "*pure-eval*")]
+	["First Message"		pure-first-msg
+					(get-buffer "*pure-eval*")]
+	["Next Message"			pure-next-msg
+					(get-buffer "*pure-eval*")]
+	["Previous Message"		pure-prev-msg
+					(get-buffer "*pure-eval*")]
+	["Last Message"			pure-last-msg
+					(get-buffer "*pure-eval*")])
+  "Menu for Pure mode.")
+  
+(define-derived-mode pure-mode fundamental-mode "Pure"
+  "Major mode for editing Pure scripts.
+
+Provides the `pure-run-script' (\\[pure-run-script]) command to
+run the interpreter on the script in the current buffer. It will
+be verified that the buffer has a file associated with it, and
+you will be prompted to save edited buffers when invoking this
+command. You can also feed lines or regions of Pure code into a
+running interpreter with the `pure-send-line' (\\[pure-send-line]) and
+`pure-send-region' (\\[pure-send-region]) commands. (This starts a new
+interpreter instance without a script if necessary.)
+
+Special commands are provided to quickly locate the main script
+and the input line of the Pure eval buffer, and to visit the
+source lines shown in error messages (see `pure-eval-mode').
+\\[pure-complete-symbol] performs completion of (documented) Pure symbols.
+These operations can also be selected from the Pure menu
+(accessible from the menu bar), which also provides commands for
+reading the online help and customizing the Pure mode setup.
+
+Command list:
+
+\\{pure-mode-map}
+Entry to this mode calls the value of pure-mode-hook if that value is
+non-nil."
+  (set-syntax-table (make-syntax-table))
+  (modify-syntax-entry ?_  "_")
+  (modify-syntax-entry ?\:  "_")
+  (modify-syntax-entry ?\.  ".")
+  (modify-syntax-entry ?\+  ".")
+  (modify-syntax-entry ?\-  ".")
+  (modify-syntax-entry ?\=  ".")
+  (modify-syntax-entry ?\<  ".")
+  (modify-syntax-entry ?\>  ".")
+  (modify-syntax-entry ?\$  ".")
+  (modify-syntax-entry ?\|  ".")
+  ;; comment syntax a la C++ mode
+  (cond
+   ((string-match "XEmacs\\|Lucid" emacs-version)
+    (modify-syntax-entry ?/  ". 1456")
+    (modify-syntax-entry ?*  ". 23"))
+   (t
+    (modify-syntax-entry ?/  ". 124b")
+    (modify-syntax-entry ?*  ". 23")))
+  (modify-syntax-entry ?\n "> b")
+  (modify-syntax-entry ?\^m "> b")
+  (use-local-map pure-mode-map)
+  (make-local-variable 'comment-start)
+  (make-local-variable 'comment-end)
+  (make-local-variable 'comment-column)
+  (make-local-variable 'comment-start-skip)
+  (make-local-variable 'comment-multi-line)
+  (setq comment-column 48
+	comment-start "// "
+	comment-end ""
+	comment-start-skip "/\\*+ *\\|// *\\|^#! *"
+	comment-multi-line nil)
+  (make-local-variable 'font-lock-defaults)
+  (setq font-lock-defaults
+	'(pure-font-lock-keywords nil nil ((?_ . "w"))))
+  (require 'easymenu)  
+  (easy-menu-define pure-mode-menu-map pure-mode-map
+		    "Menu keymap for Pure mode." pure-mode-menu)
+  (easy-menu-add pure-mode-menu-map pure-mode-map)
+  )
+
+;; comint support
+
+(require 'comint)
+
+;; customizable variables
+
+(defgroup pure nil "Major mode for editing and running Pure scripts."
+  :group 'languages)
+
+(defcustom pure-prog-name pure-prog
+  "*Name of the interpreter executable."
+  :type 'string
+  :group 'pure)
+
+(defcustom pure-prog-opts nil
+  "*List of extra command line options the interpreter is invoked with.
+See the Pure manual for a list of available options."
+  :type '(repeat string)
+  :group 'pure)
+
+(defcustom pure-library-dir pure-libdir
+  "*Location of the Pure library directory."
+  :type 'string
+  :group 'pure)
+
+(defcustom pure-docs-dir (concat pure-libdir "/docs")
+  "*Location of the Pure documentation directory."
+  :type 'string
+  :group 'pure)
+
+(defcustom pure-histfile "~/.pure_history"
+  "*Name of the command history file."
+  :type 'string
+  :group 'pure)
+
+(defcustom pure-histsize 500
+  "*Size of the command history."
+  :type 'integer
+  :group 'pure)
+
+(defcustom pure-query-before-kill nil
+  "*Indicates that the user should be prompted before zapping an existing
+interpreter process when starting a new one."
+  :type 'boolean
+  :group 'pure)
+
+(defcustom pure-prompt-regexp "^> \\|^[A-Za-z_0-9-]*> \\|^: "
+  "*Regexp to match prompts in the Pure interpreter. If you customize the
+interpreter's default prompt, you will have to change this value accordingly."
+  :type 'regexp
+  :group 'pure)
+
+(defcustom pure-msg-regexp
+  "^\\(\\([^:,\n]+\\), line \\([0-9]+\\)\\): "
+"*Regexp to match error and warning messages with source line references in
+the Pure eval buffer. Expression 1 denotes the whole source line info,
+expression 2 the file name and expression 3 the corresponding line number."
+  :type 'regexp
+  :group 'pure)
+
+(defcustom pure-mode-hook nil
+  "*Hook for customising Pure mode.
+For instance, add `turn-on-font-lock' to enable syntax highlighting."
+  :type 'hook
+  :group 'pure)
+
+(defcustom pure-eval-mode-hook nil
+  "*Hook for customising Pure eval mode.
+For instance, add `turn-on-font-lock' to enable syntax highlighting."
+  :type 'hook
+  :group 'pure)
+
+(defcustom pure-send-show-buffer t
+  "Non-nil means display the *pure-eval* buffer after sending to it."
+  :type 'boolean
+  :group 'pure)
+
+(defcustom pure-send-line-auto-forward t
+  "Control auto-forward after sending to the Pure interpreter.
+Non-nil means always go to the next Pure code line after sending."
+  :type 'boolean
+  :group 'pure)
+
+(defcustom pure-send-echo-input t
+  "Non-nil means echo input sent to the Pure interpreter."
+  :type 'boolean
+  :group 'pure)
+
+;; the following are used internally
+
+(defvar pure-output-list nil)
+(defvar pure-output-string nil)
+(defvar pure-receive-in-progress nil)
+(defvar pure-last-dir nil)
+(defvar pure-last-script nil)
+(defvar pure-last-path nil)
+
+(defvar pure-eval-font-lock-keywords
+  (list
+;    (list pure-prompt-regexp 0 'font-lock-preprocessor-face t)
+   (list pure-msg-regexp 0 'font-lock-warning-face t)
+   (list "\\<\\(bigint\\|bool\\|char\\|float\\|double\\|expr\\|short\\|int\\(8\\|16\\|32\\|64\\)?\\|long\\|string\\|pointer\\|void\\|[dci]?matrix\\)\\>" 1 'font-lock-type-face)
+;   (list "\\<\\(catch\\|throw\\)\\>" 0 'font-lock-builtin-face)
+   (list
+    (concat "\\<\\("
+	    "const\\|def\\|extern\\|infix[lr]?\\|"
+	    "let\\|n\\(amespace\\|onfix\\)\\|outfix\\|p\\(r\\(efix\\|ivate\\)\\|ostfix\\|ublic\\)\\|"
+	    "using"
+	    "\\)\\>")
+    0 'font-lock-keyword-face))
+  "Rules for fontifying in Pure-Eval mode.")
+
+;; some helper functions for pure-eval-mode: check that we're on the command
+;; resp. debugger prompt
+
+(defun pure-at-pmark-p ()
+  (and (get-buffer "*pure-eval*")
+       (get-process "pure-eval")
+       (progn (set-buffer "*pure-eval*") (comint-after-pmark-p))))
+
+(defun pure-at-command-prompt-p ()
+  (and
+   (pure-at-pmark-p)
+   (save-excursion
+     (forward-line 0)
+     (looking-at pure-prompt-regexp))))
+		   
+(defun pure-at-debug-prompt-p ()
+  (and
+   (pure-at-pmark-p)
+   (save-excursion
+     (forward-line 0)
+     (looking-at ":"))))
+
+(defvar pure-eval-mode-map nil)
+(cond ((not pure-eval-mode-map)
+       (setq pure-eval-mode-map (copy-keymap comint-mode-map))
+       (define-key pure-eval-mode-map "\C-c\C-h" 'pure-help)
+       (define-key pure-eval-mode-map "\t" 'comint-dynamic-complete)
+       (define-key pure-eval-mode-map "\C-a" 'comint-bol)
+       (define-key pure-eval-mode-map [home] 'comint-bol)
+;;       (define-key pure-eval-mode-map [up] 'comint-previous-input)
+;;       (define-key pure-eval-mode-map [down] 'comint-next-input)
+       (define-key pure-eval-mode-map [return] 'pure-current-msg-or-send)
+       (if (string-match "XEmacs\\|Lucid" emacs-version)
+	   (define-key pure-eval-mode-map [button2] 'pure-mouse-msg)
+	 (define-key pure-eval-mode-map [mouse-2] 'pure-mouse-msg))
+       (define-key pure-eval-mode-map "\C-c\C-u" 'pure-current-msg)
+       (define-key pure-eval-mode-map "\C-c\C-n" 'pure-next-msg)
+       (define-key pure-eval-mode-map "\C-c\C-p" 'pure-prev-msg)
+       (define-key pure-eval-mode-map "\C-c\C-e" 'pure-last-msg)
+       (define-key pure-eval-mode-map "\C-c\C-a" 'pure-first-msg)
+       (define-key pure-eval-mode-map "\C-c\C-f" 'pure-find-script)
+       (define-key pure-eval-mode-map "\C-c\C-v" 'pure-goto-input-line)))
+
+(defvar pure-eval-mode-menu
+  (list "Pure"
+	["Pure Help..."			pure-help t]
+	["Describe Pure-Eval Mode"	describe-mode t]
+	["Customize"			(customize-group 'pure) t]
+	"-"
+	["Find Main Script"		pure-find-script pure-last-script]
+	["Goto Input Line"		pure-goto-input-line
+					(get-process "pure-eval")]
+	["Scratchpad"			pure-scratchpad t]
+	"-"
+	["Current Message"		pure-current-msg
+					(get-buffer "*pure-eval*")]
+	["First Message"		pure-first-msg
+					(get-buffer "*pure-eval*")]
+	["Next Message"			pure-next-msg
+					(get-buffer "*pure-eval*")]
+	["Previous Message"		pure-prev-msg
+					(get-buffer "*pure-eval*")]
+	["Last Message"			pure-last-msg
+					(get-buffer "*pure-eval*")]
+	"-"
+	["Complete Symbol"		comint-dynamic-complete
+					(pure-at-command-prompt-p)])
+  "Menu for Pure-Eval mode.")
+
+(defun pure-eval-mode ()
+
+  "Major mode for interacting with the Pure interpreter, based on comint-mode.
+
+Provides the `pure-current-msg-or-send' (\\[pure-current-msg-or-send])
+command, which, when point is at an error message describing a source
+reference, visits the given line in the corresponding source file in another
+window. Otherwise it runs the `comint-send-input' command, which usually
+submits a command line to the interpreter, or copies it to the command prompt
+when point is not at the current command line.
+
+Error messages are indicated with a special font, and in XEmacs they will also
+be highlighted when the mouse passes over them. Moreover, pressing the middle
+mouse button (button2) over such a message visits the corresponding source
+line in another window (`pure-mouse-msg' command).
+
+You can also use the `pure-first-msg' (\\[pure-first-msg]), `pure-next-msg'
+(\\[pure-next-msg]), `pure-prev-msg' (\\[pure-prev-msg]) and `pure-last-msg'
+(\\[pure-last-msg]) commands to scan through error messages found in the
+buffer. The `pure-find-script' (\\[pure-find-script]) command lets you visit
+the script that is currently running, and `pure-goto-input-line'
+(\\[pure-goto-input-line]) quickly takes you to the prompt at the current
+input line in the Pure eval buffer. (These commands are also provided in Pure
+mode. If you like, you can bind them globally, so that you can invoke them
+from other kinds of buffers as well.)
+
+Besides this, you can use the usual comint commands, see the description of
+`comint-mode' for details. Some important commands are listed below:
+
+\\[comint-previous-input] and \\[comint-next-input] cycle through the command history.
+\\[comint-previous-matching-input] and \\[comint-next-matching-input] search the command history.
+\\[comint-interrupt-subjob] sends a Ctl-C to the interpreter.
+\\[comint-send-eof] sends a Ctl-D to the interpreter.
+\\[comint-dynamic-list-input-ring] lists the command history.
+\\[comint-dynamic-complete] performs symbol and filename completion.
+
+Note that in difference to standard comint mode, the C-a/home keys are rebound
+to `comint-bol', to mimic the behaviour of the default binding of these keys
+in the interpreter.
+
+Most of these operations can also be selected from the Comint and Pure mode
+menus accessible from the menu bar. The interpreter's prompt and lines
+containing error messages are described by the variables `pure-prompt-regexp'
+and `pure-msg-regexp'. The history file and size is given by the
+`pure-histfile' and `pure-histsize' variables.
+
+A complete command list is given below:
+
+\\{pure-eval-mode-map}
+Entry to this mode runs the hooks on `comint-mode-hook' and
+`pure-eval-mode-hook' (in that order)."
+
+  (interactive)
+  (kill-all-local-variables)
+  (comint-mode)
+  (set-syntax-table (make-syntax-table))
+  (modify-syntax-entry ?_  "_")
+  (modify-syntax-entry ?\:  "_")
+  (modify-syntax-entry ?\.  ".")
+  (modify-syntax-entry ?\+  ".")
+  (modify-syntax-entry ?\-  ".")
+  (modify-syntax-entry ?\=  ".")
+  (modify-syntax-entry ?\<  ".")
+  (modify-syntax-entry ?\>  ".")
+  (modify-syntax-entry ?\|  ".")
+  (modify-syntax-entry ?\$  ".")
+  (modify-syntax-entry ?\/  ". 12")
+  (modify-syntax-entry ?\*  ".")
+  (modify-syntax-entry ?\n  ">")
+  (modify-syntax-entry ?\^m ">")
+  (setq major-mode 'pure-eval-mode)
+  (setq mode-name "Pure-Eval")
+  (use-local-map pure-eval-mode-map)
+  (setq comint-prompt-regexp pure-prompt-regexp)
+  (setq comint-use-prompt-regexp t)
+  (make-local-variable 'paragraph-start)
+  (setq paragraph-start comint-prompt-regexp)
+  (make-local-variable 'comment-start)
+  (make-local-variable 'comment-end)
+  (make-local-variable 'comment-column)
+  (make-local-variable 'comment-start-skip)
+  (make-local-variable 'comment-multi-line)
+  (setq comment-column 48
+	comment-start-skip "// *\\|^#! *"
+	comment-multi-line nil)
+  (make-local-variable 'font-lock-defaults)
+  (setq font-lock-defaults
+	'(pure-eval-font-lock-keywords nil nil ((?_ . "w"))))
+  (setq comint-input-ring-file-name pure-histfile
+	comint-input-ring-size pure-histsize
+	comint-dynamic-complete-functions
+	'(pure-complete comint-dynamic-complete-filename))
+  ;; mouse-sensitive messages (requires XEmacs)
+  (cond
+   ((string-match "XEmacs\\|Lucid" emacs-version)
+    (require 'mode-motion)
+    (setq mode-motion-hook 'pure-motion-hook)))
+  (comint-read-input-ring t)
+  (require 'easymenu)  
+  (easy-menu-define pure-eval-mode-menu-map pure-eval-mode-map
+		    "Menu keymap for Pure-Eval mode." pure-eval-mode-menu)
+  (easy-menu-add pure-eval-mode-menu-map pure-eval-mode-map)
+  (run-hooks 'pure-eval-mode-hook))
+
+(if (string-match "XEmacs" emacs-version)
+(defun pure-motion-hook (event)
+  (mode-motion-highlight-internal
+    event
+    #'beginning-of-line
+    #'(lambda () 
+	(if (looking-at pure-msg-regexp)
+	    (end-of-line))))
+))
+
+;; online help
+
+(require 'thingatpt)
+
+;; This is rather simplistic, it just looks for a sequence of symbol
+;; constituents including a possible namespace prefix.
+(put 'puresym 'end-op (lambda () (skip-syntax-forward "w_")))
+(put 'puresym 'beginning-op (lambda () (skip-syntax-backward "w_")))
+(defun puresym-at-point () (thing-at-point 'puresym))
+
+(defun pure-help-complete (symbol)
+  (pure-send-list-and-digest
+   (list (concat "help_matches " symbol "\n")) t)
+  ;; Sort the list
+  (setq pure-output-list
+	(sort pure-output-list 'string-lessp))
+  ;; Remove duplicates
+  (let* ((x pure-output-list)
+	 (y (cdr x)))
+    (while y
+      (if (string-equal (car x) (car y))
+	  (setcdr x (setq y (cdr y)))
+	(setq x y
+	      y (cdr y)))))
+  (mapcar 'list pure-output-list))
+
+(defun pure-help (&optional topic)
+  "Read online help in html format.
+This works pretty much like the interpreter's help command. Uses
+emacs-w3m if it is available. The command searches for help files
+in the current directory, the `pure-docs-dir', and all
+directories specified in `pure-includes'. The given TOPIC may
+specify a search term or a help file and section/index entry, see
+topic pure#online-help for details. When run interactively, tab
+completion is provided for search terms in the index."
+;;  (interactive "sPure help topic: ")
+  (interactive
+   (let ((default (puresym-at-point)))
+     (start-pure t)
+     (list (completing-read "Pure help topic: "
+		       (dynamic-completion-table pure-help-complete)
+		       nil nil default))))
+  (let* ((args (split-string (if topic topic "") "#"))
+	 (args (if (or (null args) (not (zerop (length (car args))))) args
+		 (list topic)))
+	 (base
+	  (cond
+	   ((null args) (cons "index" ""))
+	   ((null (cdr args))
+	    (if (zerop (length (car args))) (cons "index" "")
+;; Keyword search. This looks up the given search term in the global index
+;; using the interpreter's help_index command.  If the search term isn't
+;; found, we fall back to a link target in pure.html. This mimics the
+;; behaviour of the interpreter's help command.
+	      (pure-send-list-and-digest
+	       (list (concat "help_index " (car args) "\n")) t)
+	      (if (null pure-output-list)
+		  (cons "pure" (car args))
+		(let* ((target (split-string (car pure-output-list) "#")))
+		  (if (null (cdr target)) target
+		    (cons (car target)
+			  (mapconcat 'identity (cdr target) "#")))))))
+	   (t
+	    (cons (if (zerop (length (car args))) "pure" (car args))
+	     (mapconcat 'identity (cdr args) "#")))))
+	 (file (car base))
+	 (file (if (null (file-name-extension file)) (concat file ".html")
+		 file))
+	 (anchor (if (zerop (length (cdr base))) "" (concat "#" (cdr base))))
+	 (helpfile
+	  (locate-library file t (append (list "." pure-docs-dir)
+					 pure-includes))))
+    (cond
+     ((null helpfile) (error (concat "Couldn't locate help file " file)))
+     ;; use emacs-w3m if it is available
+     ((featurep 'w3m-load)
+      (if (get-buffer "*w3m*")
+	  (switch-to-buffer-other-window "*w3m*")
+	(switch-to-buffer-other-window (current-buffer)))
+      (w3m-browse-url (concat "file:" helpfile anchor)))
+     ;; otherwise use Emacs' generic browse-url facility
+     (t (browse-url (concat "file:" helpfile anchor))))))
+
+;; create the Pure scratchpad
+
+(defun pure-scratchpad ()
+  "Create the *pure-scratch* buffer if necessary and put it in
+Pure mode."
+  (interactive)
+  (let* ((pure-scratch-active (not (null (get-buffer "*pure-scratch*"))))
+	 (pure-scratch-buffer (get-buffer-create "*pure-scratch*")))
+    (set-buffer pure-scratch-buffer)
+    (if (not pure-scratch-active) (pure-mode))
+    (pop-to-buffer pure-scratch-buffer)))
+
+;; run a Pure script in a Pure Eval buffer
+
+;; make sure win32 XEmacs quotes arguments containing whitespace
+
+(if (string-match "XEmacs.*-win32" (emacs-version))
+    (defun pure-quote-arg (x)
+      (if (string-match "[ \t]" x) (concat "\"" x "\"") x))
+  (defun pure-quote-arg (x) x))
+
+(defun run-pure (&rest args)
+
+  "Run the interpreter with given arguments, in buffer *pure-eval*.
+
+The interpreter is invoked in the directory of the current buffer (current
+default directory if no file is associated with the current buffer).
+If buffer exists but process is not running, make new process.
+If buffer exists and process is running, kill it and start a new one.
+
+Program used comes from variable `pure-prog-name'. The buffer is put in Pure
+eval mode, giving commands for visiting source files, sending input,
+manipulating the command history, etc. See `pure-eval-mode'.
+
+\(Type \\[describe-mode] in the Pure eval buffer for a list of commands.)"
+
+  (interactive)
+  (let* ((dir (if buffer-file-name
+		  (file-name-directory (buffer-file-name))
+		default-directory))
+	 (pure-eval-active (not (null (get-buffer "*pure-eval*"))))
+	 (pure-eval-running (comint-check-proc "*pure-eval*"))
+	 (pure-eval-buffer (get-buffer-create "*pure-eval*")))
+    (if (and pure-eval-running
+	     pure-query-before-kill
+	     (not
+	      (y-or-n-p
+	       "An interpreter process is still running. Start a new one? ")))
+	(message "Aborted")
+      (set-buffer pure-eval-buffer)
+      (goto-char (point-max))
+      (let ((proc (get-buffer-process pure-eval-buffer)))
+	(if proc (delete-process proc))) ; Blast any old process.
+      (cd dir)
+      (if (not pure-eval-active)
+	  (pure-eval-mode)
+	(if (and pure-eval-running
+		 (or (not (string-equal
+			   comint-input-ring-file-name pure-histfile))
+		     (not (= comint-input-ring-size pure-histsize))))
+	    ;; reset history in case any of the options have changed
+	    (progn
+	      (comint-write-input-ring)
+	      (setq comint-input-ring-file-name pure-histfile
+		    comint-input-ring-size pure-histsize)
+	      (comint-read-input-ring t))))
+      ;; invoke the interpreter
+      (setenv "PURE_MORE" nil)
+      (setenv "PURE_LESS" nil) ; disable paging in the interpreter
+      (comint-exec pure-eval-buffer "pure-eval" pure-prog-name nil
+		   (append (list "-q" "-i" "--noediting")
+			   pure-prog-opts args))
+      ;; set up process parameters
+      (setq pure-output-list nil
+	    pure-output-string nil
+	    pure-receive-in-progress nil
+	    pure-last-script nil
+	    pure-last-dir dir
+	    pure-last-path nil)
+      (set-process-sentinel (get-process "pure-eval") 'pure-eval-sentinel)
+      (if (not pure-query-before-kill)
+	  (process-kill-without-query (get-process "pure-eval")))
+      ;; switch to and go to the end of the eval buffer
+      (pop-to-buffer "*pure-eval*")
+      (goto-char (point-max))))
+  )
+
+(defun start-pure (&optional arg)
+  "Start a new interpreter instance in buffer *pure-eval*, unless
+an interpreter is already running. Hides the buffer window if ARG
+is given. See `run-pure' for details."
+  (interactive "P")
+  (if (not (comint-check-proc "*pure-eval*"))
+      (save-current-buffer
+	(message "starting interpreter...")
+	(run-pure)
+	(if arg
+	    ;; hide the *pure-eval* window
+	    (delete-window))
+	;; give the interpreter some time to start
+	(sleep-for 2)))
+  )
+
+(defun pure-run-script ()
+  "Run the interpreter with the script in the current buffer, in buffer
+*pure-eval*. See `run-pure' for details."
+  (interactive)
+  (let ((script-file
+	 (if (buffer-file-name)
+	     (file-name-nondirectory (buffer-file-name))
+	   (error "Buffer is not associated with any file"))))
+    (save-some-buffers)
+    (run-pure script-file)
+    (setq pure-last-script script-file)))
+
+(defun pure-debug-script ()
+  "Run the interpreter with the script in the current buffer, like
+`pure-run-script', but with debugging enabled."
+  (interactive)
+  (let ((script-file
+	 (if (buffer-file-name)
+	     (file-name-nondirectory (buffer-file-name))
+	   (error "Buffer is not associated with any file"))))
+    (save-some-buffers)
+    (run-pure "-g" script-file)
+    (setq pure-last-script script-file)))
+
+;; run the interpreter to create a TAGS file
+
+(defun pure-make-tags ()
+  "Run the interpreter on the script in the current buffer to create a
+TAGS file."
+  (interactive)
+  (let ((script-file
+	 (if (buffer-file-name)
+	     (file-name-nondirectory (buffer-file-name))
+	   (error "Buffer is not associated with any file"))))
+    (save-some-buffers)
+    (call-process pure-prog-name nil 0 nil "--etags" script-file)))
+
+;; find a script in the current directory or on the Pure library path
+
+(defun pure-locate-script (file)
+  (let ((script
+	 (locate-library file t (append (list "." pure-library-dir)
+					pure-includes))))
+    (if script
+	script
+      (error (concat "File " file " not found")))))
+
+;; visit source lines of error and debugging messages
+
+(defun pure-current-msg ()
+  "Show the source line referenced by an error message on the current line
+in the Pure eval buffer."
+  (interactive)
+  (let ((actwindow (selected-window)))
+    (if (get-buffer "*pure-eval*")
+	(pop-to-buffer "*pure-eval*")
+      (error "No script is running"))
+    (cond
+     ((save-excursion (forward-line 0) (looking-at pure-msg-regexp))
+      (forward-line 0) (recenter 0)
+      (let (visit-buffer
+	    visit-line
+	    (file (match-string 2)) (line (match-string 3)))
+	(setq visit-buffer (find-file-noselect (pure-locate-script file)))
+	(setq visit-line (string-to-number line))
+	(message "%s, line %s" file line)
+	(switch-to-buffer-other-window visit-buffer)
+	(goto-line visit-line)))
+     (t
+      (select-window actwindow)
+      (error "No message found")))))
+
+(defun pure-current-msg-or-send ()
+  "Depending on whether point is at an error message, either execute a
+`pure-current-msg' or a `comint-send-input' command. This must be invoked
+from the Pure eval buffer."
+  (interactive)
+  (if (save-excursion (forward-line 0) (looking-at pure-msg-regexp))
+      (pure-current-msg)
+    (comint-send-input)))
+
+(defun pure-next-msg (&optional count)
+  "Advance to the next Pure error message below the current line in the Pure
+eval buffer, and show the referenced source line in another window. When used
+with a numeric argument n, advance to the nth message below the current line
+(move backwards if numeric argument is negative).
+
+Note that this command can easily be fooled if the running script produces
+some output, or you insert some text, which looks like an error message, so
+you should take care what you're doing."
+  (interactive "P")
+  (if (and (numberp count) (< count 0))
+      (pure-prev-msg (- count))
+    (if (null count) (setq count 1))
+    (let ((actwindow (selected-window)))
+      (if (get-buffer "*pure-eval*")
+	  (pop-to-buffer "*pure-eval*")
+	(error "No script is running"))
+      (forward-line 0)
+      (if (looking-at pure-msg-regexp)
+	  (if (save-excursion (end-of-line) (not (eobp)))
+	      (forward-line 1)
+	    (error "No more messages")))
+      (let ((pos (re-search-forward pure-msg-regexp nil t count)))
+	(if pos
+	    (let ((file (match-string 2)) (line (match-string 3)))
+	      (goto-char pos)
+	      (recenter 0)
+	      (find-file-other-window (pure-locate-script file))
+	      (goto-line (string-to-number line))
+	      (message "%s, line %s" file line))
+	  (select-window actwindow)
+	  (error "No more messages"))))))
+
+(defun pure-prev-msg (&optional count)
+  "Advance to previous Pure error messages above the current line in the Pure
+eval buffer, and show the referenced source line in another window. Like
+`pure-next-msg', but moves backward."
+  (interactive "P")
+  (if (and (numberp count) (< count 0))
+      (pure-next-msg (- count))
+    (if (null count) (setq count 1))
+    (let ((actwindow (selected-window)))
+      (if (get-buffer "*pure-eval*")
+	  (pop-to-buffer "*pure-eval*")
+	(error "No script is running"))
+      (forward-line 0)
+      (let ((pos (re-search-backward pure-msg-regexp nil t count)))
+	(if pos
+	    (let ((file (match-string 2)) (line (match-string 3)))
+	      (goto-char pos)
+	      (recenter 0)
+	      (find-file-other-window (pure-locate-script file))
+	      (goto-line (string-to-number line))
+	      (message "%s, line %s" file line))
+	  (select-window actwindow)
+	  (error "No more messages"))))))
+
+(defun pure-last-msg ()
+  "Advance to the last message in a contiguous sequence of error messages at
+or below the current line, and show the referenced source line in another
+window."
+  (interactive)
+  (let ((actwindow (selected-window)))
+    (if (get-buffer "*pure-eval*")
+	(pop-to-buffer "*pure-eval*")
+      (error "No script is running"))
+    (forward-line 0)
+    (let ((pos
+	   (if (looking-at pure-msg-regexp)
+	       (point)
+	     (re-search-forward pure-msg-regexp nil t))))
+      (if pos
+	  (progn
+	    (goto-char pos)
+	    (while (and (save-excursion (end-of-line) (not (eobp)))
+			(save-excursion (forward-line 1)
+					(looking-at pure-msg-regexp)))
+	      (forward-line 1))
+	    (let ((file (match-string 2)) (line (match-string 3)))
+	      (recenter 0)
+	      (find-file-other-window (pure-locate-script file))
+	      (goto-line (string-to-number line))
+	      (message "%s, line %s" file line)))
+	(select-window actwindow)
+	(error "No more messages")))))
+
+(defun pure-first-msg ()
+  "Advance to the first message in a contiguous sequence of error messages at
+or above the current line, and show the referenced source line in another
+window."
+  (interactive)
+  (let ((actwindow (selected-window)))
+    (if (get-buffer "*pure-eval*")
+	(pop-to-buffer "*pure-eval*")
+      (error "No script is running"))
+    (forward-line 0)
+    (let ((pos
+	   (if (looking-at pure-msg-regexp)
+	       (point)
+	     (re-search-backward pure-msg-regexp nil t))))
+      (if pos
+	  (progn
+	    (goto-char pos)
+	    (while (and (not (bobp))
+			(save-excursion (forward-line -1)
+					(looking-at pure-msg-regexp)))
+	      (forward-line -1))
+	    (let ((file (match-string 2)) (line (match-string 3)))
+	      (recenter 0)
+	      (find-file-other-window (pure-locate-script file))
+	      (goto-line (string-to-number line))
+	      (message "%s, line %s" file line)))
+	(select-window actwindow)
+	(error "No more messages")))))
+
+(if (string-match "XEmacs" emacs-version)
+(defun pure-mouse-msg (event)
+  "Show the source line referenced by an error message under the mouse."
+  (interactive "e")
+  (mouse-set-point event)
+  (if (save-excursion (forward-line 0) (looking-at pure-msg-regexp))
+      (progn (forward-line 0) (pure-current-msg))
+    (mouse-yank event)))
+(defun pure-mouse-msg (event)
+  "Show the source line referenced by an error message under the mouse."
+  (interactive "e")
+  (mouse-set-point event)
+  (if (save-excursion (forward-line 0) (looking-at pure-msg-regexp))
+      (progn (forward-line 0) (pure-current-msg))
+    (mouse-yank-at-click event 0)))
+)
+
+;; visit main script and the eval buffer
+
+(defun pure-find-script ()
+  "Visit the script currently running in the Pure eval buffer."
+  (interactive)
+  (if (and pure-last-dir pure-last-script)
+      (if (not (string-equal (concat pure-last-dir pure-last-script)
+			     (buffer-file-name)))
+	  (find-file-other-window (concat pure-last-dir pure-last-script)))
+    (error "No script is running")))
+
+(defun pure-goto-input-line ()
+  "Move to the prompt in the Pure eval buffer."
+  (interactive)
+  (if (get-buffer "*pure-eval*")
+      (progn (pop-to-buffer "*pure-eval*") (goto-char (point-max)))
+    (error "No script is running")))
+
+;; Some nice stuff borrowed from Octave mode.
+
+;; Symbol completion for Pure buffers. This differs from the completion
+;; function pure-complete used in comint mode in that symbols are looked up in
+;; the documentation, so it works the same no matter which scripts are
+;; currently loaded in the interpreter. OTOH, this means that only documented
+;; symbols will be recognized.
+
+(defun pure-index-filter (symbol)
+  (let ((res (replace-regexp-in-string "^\\([^ ]+\\) .*$" "\\1" symbol)))
+    (replace-regexp-in-string "^\\(.+\\)\\[[0-9]+\\]$" "\\1" res)))
+
+(defun pure-index-complete (symbol)
+  (pure-send-list-and-digest
+   (list (concat "help_matches " symbol "\n")) t)
+  ;; Remove all trailing garbage that doesn't belong to the symbols.
+  (setq pure-output-list
+	(mapcar 'pure-index-filter pure-output-list))
+  ;; Sort the list
+  (setq pure-output-list
+	(sort pure-output-list 'string-lessp))
+  ;; Remove duplicates
+  (let* ((x pure-output-list)
+	 (y (cdr x)))
+    (while y
+      (if (string-equal (car x) (car y))
+	  (setcdr x (setq y (cdr y)))
+	(setq x y
+	      y (cdr y)))))
+  (mapcar 'list pure-output-list))
+
+(defun pure-complete-symbol ()
+  "Perform completion for documented Pure symbols on the token
+preceding point."
+  ;; This code taken from lisp-complete-symbol
+  (interactive)
+  (start-pure t)
+  (let* ((end (point))
+	 (beg (save-excursion
+		;; skip back one word/identifier or operator (punctuation)
+		(skip-syntax-backward "w_")
+		(and (eq (point) end)
+		     (skip-syntax-backward "."))
+		;; skip leading :: in absolute qualid
+		(and (looking-at "::")
+		     (goto-char (match-end 0)))
+		(point)))
+	 (string (buffer-substring-no-properties beg end))
+	 (completion-alist (dynamic-completion-table pure-index-complete))
+	 (completion (try-completion string completion-alist)))
+    (cond ((eq completion t))		; ???
+	  ((null completion)
+	   (message "Can't find completion for \"%s\"" string)
+	   (ding))
+	  ((not (string= string completion))
+           (delete-region beg end)
+           (insert completion))
+	  (t
+	   (let ((list (all-completions string completion-alist))
+		 (conf (current-window-configuration)))
+	     ;; Taken from comint.el
+	     (message "Making completion list...")
+	     (with-output-to-temp-buffer "*Completions*"
+	       (display-completion-list list string))
+	     (message "Hit space to flush")
+	     (let (key first)
+	       (if (save-excursion
+		     (set-buffer (get-buffer "*Completions*"))
+		     (setq key (read-key-sequence nil)
+			   first (aref key 0))
+		     (and (consp first) (consp (event-start first))
+			  (eq (window-buffer (posn-window (event-start
+							   first)))
+			      (get-buffer "*Completions*"))
+			  (eq (key-binding key) 'mouse-choose-completion)))
+		   (progn
+		     (mouse-choose-completion first)
+		     (set-window-configuration conf))
+		 (if (eq first ?\ )
+		     (set-window-configuration conf)
+		   (setq unread-command-events
+			 (listify-key-sequence key))))))))))
+
+;; Commands to move to next/previous code line in a Pure buffer. These aren't
+;; bound by default, but pure-next-code-line is used to feed a code line into
+;; the Pure interpreter in pure-send-line below.
+
+(defun pure-next-code-line (&optional arg)
+  "Move ARG lines of Pure code forward (backward if ARG is negative).
+Skips past all empty and comment lines.  Default for ARG is 1.
+
+On success, return 0.  Otherwise, go as far as possible and return -1."
+  (interactive "p")
+  (or arg (setq arg 1))
+  (beginning-of-line)
+  (let ((n 0)
+	(inc (if (> arg 0) 1 -1)))
+    (while (and (/= arg 0) (= n 0))
+      (setq n (forward-line inc))
+      (while (and (= n 0)
+		  (looking-at "\\s-*\\($\\|//\\)"))
+	(setq n (forward-line inc)))
+      (setq arg (- arg inc)))
+    n))
+
+(defun pure-previous-code-line (&optional arg)
+  "Move ARG lines of Pure code backward (forward if ARG is negative).
+Skips past all empty and comment lines.  Default for ARG is 1.
+
+On success, return 0.  Otherwise, go as far as possible and return -1."
+  (interactive "p")
+  (or arg (setq arg 1))
+  (pure-next-code-line (- arg)))
+
+;; Communication with the Pure interpreter. These feed a region or the current
+;; line in a Pure buffer into the interpreter. A new interpreter is started if
+;; none is currently running.
+
+(defun pure-send-region (beg end)
+  "Send current region to the Pure interpreter."
+  (interactive "r")
+  (start-pure t)
+  (let* ((pure-eval-buffer (get-buffer "*pure-eval*"))
+	 (proc (get-buffer-process pure-eval-buffer))
+	 (string (buffer-substring-no-properties beg end))
+	 line)
+    (save-excursion
+      (set-buffer pure-eval-buffer)
+      (setq pure-output-list nil)
+      (while (not (string-equal string ""))
+	(if (string-match "\n" string)
+	    (setq line (substring string 0 (match-beginning 0))
+		  string (substring string (match-end 0)))
+	  (setq line string string ""))
+	(setq pure-receive-in-progress t)
+	(pure-send-list-and-digest (list (concat line "\n")))
+	(while pure-receive-in-progress
+	  (accept-process-output proc))
+	(insert-before-markers
+	 (mapconcat 'identity
+		    (append
+		     (if pure-send-echo-input (list line) (list ""))
+		     pure-output-list
+		     (list pure-output-string))
+		    "\n"))))
+    (if pure-send-show-buffer
+	(display-buffer pure-eval-buffer))))
+
+(defun pure-send-line (&optional arg)
+  "Send current Pure code line to the Pure interpreter.
+With positive prefix ARG, send that many lines.
+If `pure-send-line-auto-forward' is non-nil, go to the next unsent
+code line."
+  (interactive "P")
+  (or arg (setq arg 1))
+  (if (> arg 0)
+      (let (beg end)
+	(beginning-of-line)
+	(setq beg (point))
+	(pure-next-code-line (- arg 1))
+	(end-of-line)
+	(setq end (point))
+	(if pure-send-line-auto-forward
+	    (pure-next-code-line 1))
+	(pure-send-region beg end))))
+
+(defun pure-symbol-complete (symbol)
+  (pure-send-list-and-digest
+   (list (concat "completion_matches " symbol "\n")) t)
+  ;; Sort the list
+  (setq pure-output-list
+	(sort pure-output-list 'string-lessp))
+  ;; Remove duplicates
+  (let* ((x pure-output-list)
+	 (y (cdr x)))
+    (while y
+      (if (string-equal (car x) (car y))
+	  (setcdr x (setq y (cdr y)))
+	(setq x y
+	      y (cdr y)))))
+  (mapcar 'list pure-output-list))
+
+(defun pure-show (symbol &optional arg)
+  "Show the definition of SYMBOL in the Pure interpreter. If ARG
+is not nil, insert the output into the current buffer instead."
+  (interactive
+   (list
+    (let ((default (puresym-at-point)))
+      (start-pure t)
+      (completing-read "Show symbol: "
+		       (dynamic-completion-table pure-symbol-complete)
+		       nil nil default))
+    current-prefix-arg))
+  (let* ((pure-eval-buffer (get-buffer "*pure-eval*"))
+	 (proc (get-buffer-process pure-eval-buffer))
+	 line)
+    (save-excursion
+      (set-buffer pure-eval-buffer)
+      (setq pure-output-list nil)
+      (setq pure-receive-in-progress t)
+      (setq line (concat "show " symbol))
+      (pure-send-list-and-digest (list (concat line "\n")))
+      (while pure-receive-in-progress
+	(accept-process-output proc))
+      (if (not arg)
+	  (insert-before-markers
+	   (mapconcat 'identity
+		      (append
+		       (if pure-send-echo-input (list line) (list ""))
+		       pure-output-list
+		       (list pure-output-string))
+		      "\n"))))
+    (cond
+     (arg
+      (insert (mapconcat 'identity pure-output-list "\n") "\n"))
+     (pure-send-show-buffer
+      (display-buffer pure-eval-buffer)))))
+
+(defun pure-clear (symbol)
+  "Clear the definition of SYMBOL in the Pure interpreter."
+  (interactive
+   (list
+    (let ((default (puresym-at-point)))
+      (start-pure t)
+      (completing-read "Clear symbol: "
+		       (dynamic-completion-table pure-symbol-complete)
+		       nil nil default))))
+  (start-pure t)
+  (let* ((pure-eval-buffer (get-buffer "*pure-eval*"))
+	 (proc (get-buffer-process pure-eval-buffer))
+	 line)
+    (save-excursion
+      (set-buffer pure-eval-buffer)
+      (setq pure-output-list nil)
+      (setq pure-receive-in-progress t)
+      (setq line (concat "clear " symbol))
+      (pure-send-list-and-digest (list (concat line "\n")))
+      (while pure-receive-in-progress
+	(accept-process-output proc))
+      (insert-before-markers
+       (mapconcat 'identity
+		  (append
+		   (if pure-send-echo-input (list line) (list ""))
+		   pure-output-list
+		   (list pure-output-string))
+		  "\n")))
+    (if pure-send-show-buffer
+	(display-buffer pure-eval-buffer))))
+
+;; completion
+
+(defun pure-complete ()
+  "Perform completion for defined Pure symbols on the token
+preceding point."
+  (interactive)
+  (if (pure-at-command-prompt-p)
+      (let* ((end (point))
+	     (command
+	      (save-excursion
+		;; skip back one word/identifier or operator (punctuation)
+		(skip-syntax-backward "w_")
+		(and (eq (point) end)
+		     (skip-syntax-backward "."))
+		(and (looking-at pure-prompt-regexp)
+		     (goto-char (match-end 0)))
+		(buffer-substring-no-properties (point) end))))
+	(pure-send-list-and-digest
+	 (list (concat "completion_matches " command "\n")) t)
+	;; Sort the list
+	(setq pure-output-list
+	      (sort pure-output-list 'string-lessp))
+	;; Remove duplicates
+	(let* ((x pure-output-list)
+	       (y (cdr x)))
+	  (while y
+	    (if (string-equal (car x) (car y))
+		(setcdr x (setq y (cdr y)))
+	      (setq x y
+		    y (cdr y)))))
+	;; And let comint handle the rest
+	(comint-dynamic-simple-complete command pure-output-list))))
+
+;; send commands to the Pure interpreter and digest their results
+
+(defun pure-output-digest (proc string)
+  (setq string (concat pure-output-string string))
+  (while (string-match "\n" string)
+    (setq pure-output-list
+	  (append pure-output-list
+		  (list (substring string 0 (match-beginning 0))))
+	  string (substring string (match-end 0))))
+  (if (string-match pure-prompt-regexp string)
+      (setq pure-receive-in-progress nil))
+  (setq pure-output-string string))
+
+(defun pure-send-list-and-digest (list &optional skip)
+  (let* ((pure-eval-buffer (get-buffer "*pure-eval*"))
+	 (proc (get-buffer-process pure-eval-buffer))
+	 (filter (process-filter proc))
+	 string)
+    (set-process-filter proc 'pure-output-digest)
+    (setq pure-output-list nil)
+    (unwind-protect
+	(while (setq string (car list))
+	  (setq pure-output-string nil
+		pure-receive-in-progress t)
+	  (if skip
+	      (process-send-string proc string)
+	    (comint-send-string proc string))
+	  (while pure-receive-in-progress
+	    (accept-process-output proc))
+	  (setq list (cdr list)))
+      (set-process-filter proc filter))))
+
+;; perform cleanup when the interpreter process is killed
+
+(defun pure-eval-sentinel (proc msg)
+  (if (null (buffer-name (process-buffer proc)))
+      ;; buffer has been killed
+      (set-process-buffer proc nil)
+    (set-buffer (process-buffer proc))
+    (comint-write-input-ring)
+    (setq pure-last-dir nil
+	  pure-last-script nil)
+    (goto-char (point-max))
+    (insert "\n*** Process Pure-Eval finished ***\n")))
+
+;; make sure that the history is written when exiting emacs
+(add-hook 'kill-emacs-hook
+	  (lambda ()
+	    (let ((pure-eval-buffer (get-buffer "*pure-eval*")))
+	      (cond
+	       (pure-eval-buffer
+		(set-buffer pure-eval-buffer)
+		(comint-write-input-ring))))))
+
+(provide 'pure-mode)

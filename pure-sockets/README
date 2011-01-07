@@ -1,0 +1,287 @@
+
+====================================
+pure-sockets: Pure Sockets Interface
+====================================
+
+.. default-domain:: pure
+.. module:: sockets
+
+Version @version@, |today|
+
+Albert Gräf <Dr.Graef@t-online.de>
+
+This is an interface to the Berkeley socket functions. It provides most of the
+core functionality, so you can create sockets for both stream and datagram
+based protocols and use these to transmit messages. Unix-style file sockets
+are also available if the host system supports them.
+
+Installation
+============
+
+Get the latest source from
+http://pure-lang.googlecode.com/files/pure-sockets-@version@.tar.gz.
+
+This package uses Pure's new bitcode loader to ease porting, so you'll need
+Pure 0.45 or later and an LLVM-based C compiler installed. The Makefile is set
+up for clang (http://clang.llvm.org/) by default, because it's easier to
+install, but you can also use llvm-gcc if you set the CC make variable
+accordingly.
+
+For clang compilation, do the usual ``make && sudo make install`` and you
+should be set. To use llvm-gcc, replace ``make`` with ``make CC=llvm-gcc``.
+You can also set custom compilation options with the CFLAGS variable, e.g.:
+``make CFLAGS=-O3``.
+
+To uninstall the module, use ``sudo make uninstall``. There are a number of
+other targets (mostly for maintainers), please see the Makefile for details.
+
+Usage
+=====
+
+To use the operations of this module, put the following in your Pure script::
+
+  using sockets;
+
+On some systems you may also have to pull in a special system library to get
+the socket functions. E.g.::
+
+  using "lib:wsock32", sockets;
+
+With the :mod:`sockets` module loaded, all the standard socket functions are
+available and work pretty much like in C. The only real difference is that,
+for convenience, functions taking socket addresses as parameters
+(``struct_sockaddr*`` pointers in Pure), are called without the ``addrlen``
+parameter; the size of the socket address structure will be inferred
+automatically and passed to the underlying C functions. Also, there are some
+convenience functions which act as wrappers around ``getaddrinfo`` and
+``getnameinfo`` to create socket addresses from symbolic information (hostname
+or ip, port names or numbers) and return information about existing address
+pointers, see `Creating and Inspecting Socket Addresses`_ below.
+
+Below is a list of the provided functions. Please see the corresponding manual
+pages for details, and check the Pure scripts in the examples subdirectory for
+some examples.
+
+Creating and Inspecting Socket Addresses
+----------------------------------------
+
+These functions are Pure-specific. The created socket addresses are malloc'ed
+and free themselves automatically when garbage-collected.
+
+.. function:: sockaddr ()
+
+   Create a pointer to an empty socket address suitable to hold the socket
+   address result of routines like :func:`accept`, :func:`getsockname`,
+   :func:`recvfrom`, etc. which return a socket address.
+
+.. function:: sockaddr ([int family,] char *path)
+
+   Create a local (a.k.a. file) socket address for the given pathname. The
+   ``family`` parameter, if specified, must be :const:`AF_UNIX` here. Please
+   note that :const:`AF_UNIX` is not supported on all platforms. You can check
+   for this by testing the :const:`HAVE_AF_UNIX` constant, which is a truth
+   value specifying whether :const:`AF_UNIX` is available on your system.
+
+.. function:: sockaddr ([int family,] char *host, char *port)
+              sockaddr ([int family,] char *host, int port)
+
+   This uses ``getaddrinfo`` to retrieve an :const:`AF_INET` or
+   :const:`AF_INET6` address for the given hostname (or numeric IP address in
+   string form) and port (specified either as an int or a string). If
+   ``family`` is omitted, it defaults to :const:`AF_UNSPEC` which matches both
+   :const:`AF_INET` and :const:`AF_INET6` addresses.
+
+.. function:: sockaddrs ([int family,] char *host, char *port)
+              sockaddrs ([int family,] char *host, int port)
+
+   This works like :func:`sockaddr` above, but returns a list with *all*
+   matching addresses.
+
+.. function:: sockaddr_family addr
+
+   Returns the address family of the given address.
+
+.. function:: sockaddr_path addr
+
+   Returns the pathname for :const:`AF_UNIX` addresses.
+
+.. function:: sockaddr_hostname addr
+
+   Returns the hostname if available, the IP address otherwise.
+
+.. function:: sockaddr_ip addr
+
+   Returns the IP address.
+
+.. function:: sockaddr_service addr
+
+   Returns the service (a.k.a. port) name.
+
+.. function:: sockaddr_port addr
+
+   Returns the port number.
+
+.. function:: sockaddr_info addr
+
+   Returns a readable description of a socket address, as a
+   ``(family,hostname,port)`` tuple. You should be able to pass this into
+   :func:`sockaddr` again to get the original address.
+
+Creating and Closing Sockets
+----------------------------
+
+.. function:: socket domain type protocol
+
+   Creates a socket for the given protocol family (:const:`AF_UNIX`,
+   :const:`AF_INET` or :const:`AF_INET6`), socket type (:const:`SOCK_STREAM`,
+   :const:`SOCK_DGRAM`, etc.) and protocol. Note that on Linux we also support
+   the :const:`SOCK_NONBLOCK` (non-blocking) and :const:`SOCK_CLOEXEC`
+   (close-on-exec) flags which can be or'ed with the socket type to get
+   sockets with the corresponding features. The protocol number is usually 0,
+   denoting the default protocol, but it can also be any of the prescribed
+   :const:`IPPROTO` constants (a few common ones are predefined by this
+   module, try ``show -g IPPROTO_*`` for a list of those).
+
+.. function:: socketpair domain type protocol sv
+
+   Create a pair of sockets. The descriptors are returned in the integer
+   vector ``sv`` passed in the last argument.
+
+.. function:: shutdown fd how
+
+   Perform shutdown on a socket. The second argument should be one of
+   :const:`SHUT_RD`, :const:`SHUT_WR` and :const:`SHUT_RDWR`.
+
+.. function:: closesocket fd
+
+   This is provided for Windows compatibility. On POSIX systems this is just
+   ``close``.
+
+Establishing Connections
+------------------------
+
+.. function:: accept sockfd addr
+
+.. function:: bind sockfd addr
+
+.. function:: connect sockfd addr
+
+.. function:: listen sockfd backlog
+
+Socket I/O
+----------
+
+.. function:: recv fd buf len flags
+
+.. function:: send fd buf len flags
+
+.. function:: recvfrom fd buf len flags addr
+
+.. function:: sendto fd buf len flags addr
+
+The usual :func:`send`/:func:`recv` flags specified by POSIX
+(:const:`MSG_EOR`, :const:`MSG_OOB`, :const:`MSG_PEEK`, :const:`MSG_WAITALL`)
+are provided. On Linux we also support :const:`MSG_DONTWAIT`. Note that on
+POSIX systems you can also just :func:`fdopen` the socket descriptor and use
+the standard file I/O operations from the :mod:`system` module instead.
+
+Socket Information
+------------------
+
+.. function:: getsockname fd addr
+
+.. function:: getpeername fd addr
+
+.. function:: getsockopt fd level name val len
+
+.. function:: setsockopt fd level name val len
+
+For :func:`getsockopt` and :func:`setsockopt`, currently only the
+:const:`SOL_SOCKET` level is defined (``level`` argument) along with the
+available POSIX socket options (``name`` argument). Try ``show -g SO_*`` to
+get a list of those. Also note that for most socket level options the ``val``
+argument is actually an ``int*``, so you can pass a Pure int vector (with
+``len = SIZEOF_INT``) for that parameter.
+
+Example
+=======
+
+Here is a fairly minimal example using Unix stream sockets. To keep things
+simple, this does no error checking whatsoever and just keeps sending strings
+back and forth. More elaborate examples can be found in the examples directory
+in the sources.
+
+::
+
+  using sockets, system;
+
+  const path = "server_socket";
+  extern int unlink(char *name);
+
+  server = loop with
+    loop = loop if ~null s && ~response fp s when
+      // Connect to a client.
+      cfd = accept fd $ sockaddr ();
+      // Open the client socket as a FILE* and read a request.
+      fp = fdopen cfd "r+"; s = fgets fp;
+    end;
+    loop = puts "server is exiting" $$ closesocket fd $$
+           unlink path $$ () otherwise;
+    response fp s::string = s=="quit\n" when
+      // Process the request. (Here we just print the received
+      // message and echo it back to the client.)
+      printf "server> %s" s;
+      fputs s fp;
+    end;
+  end when
+    // Create the server socket and start listening.
+    unlink path;
+    fd = socket AF_UNIX SOCK_STREAM 0;
+    bind fd (sockaddr path); listen fd 5;
+    printf "server listening at '%s'\n" path;
+  end;
+
+  client = loop with
+    // Keep reading requests from stdin.
+    loop = loop if ~null s && ~request s when
+      fputs "client> " stdout; s = fgets stdin;
+    end;
+    loop = puts "client is exiting" $$ () otherwise;
+    request s::string = s=="quit\n" when
+      fd = socket AF_UNIX SOCK_STREAM 0;
+      connect fd (sockaddr path);
+      // Send the request to the server.
+      fp = fdopen fd "r+"; fputs s fp;
+      // Get the reply.
+      s = fgets fp;
+    end;
+  end;
+
+To use this example, run the ``server`` function in one instance of the Pure
+interpreter and the ``client`` function in another. Enter a line when the
+client prompts you for input; it will be printed by the server. Behind the
+scenes, the server also sends the line back to the client. After receiving the
+reply, the client prompts for the next input line. Entering end-of-file at the
+client prompt terminates the client but keeps the server running, so that you
+can start another client and reconnect to the server. Entering just ``quit``
+in the client terminates both server and client. Here is how a typical
+interaction may look like::
+
+  > client;
+  client> 1+1
+  client> foo bar
+  client> quit
+  client is exiting
+  ()
+
+  > server;
+  server listening at 'server_socket'
+  server> 1+1
+  server> foo bar
+  server> quit
+  server is exiting
+  ()
+
+Note that while the server processes requests sequentially, it accepts
+connections from a new client after each request, so that you can run as many
+clients as you like.

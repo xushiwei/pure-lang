@@ -1,0 +1,1641 @@
+
+/* Pure system interface. Or at least its beginnings. */
+
+/* NOTE: This module isn't loaded by the standard prelude, so you'll have to
+   add the clause 'using system;' to your programs in which you want to use
+   this interface. */
+
+/* Copyright (c) 2008-2010 by Albert Graef <Dr.Graef@t-online.de>.
+
+   This file is part of the Pure standard library.
+
+   The Pure standard library is free software: you can redistribute it and/or
+   modify it under the terms of the GNU Lesser General Public License as
+   published by the Free Software Foundation, either version 3 of the License,
+   or (at your option) any later version.
+
+   Pure is distributed in the hope that it will be useful, but WITHOUT ANY
+   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+   FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License for
+   more details.
+
+   You should have received a copy of the GNU Lesser General Public License
+   along with this program.  If not, see <http://www.gnu.org/licenses/>. */
+
+/* .. module:: system
+
+   System Interface
+   ================
+
+   This module offers some useful system routines, straight from the C
+   library, as well as some convenience functions for wrapping these up in
+   Pure. Even the "purest" program needs to do some basic I/O every once in a
+   while, and this module provides the necessary stuff to do just that. The
+   operations provided in this module should work (if necessary by a suitable
+   emulation) on all supported systems. Most of the following functions are
+   extensively documented in the C library manual pages, so we concentrate on
+   the Pure-specific aspects here.
+
+   Imports
+   -------
+
+   To use the operations of this module, add the following import declaration
+   to your program::
+
+     using system;
+
+   Some functions of the system interface are provided in separate modules;
+   see `Additional POSIX Functions`_ and `Option Parsing`_. */
+
+/* Provide some useful values as global variables. These also include the
+   standard I/O streams and various constants related to the I/O, glob and
+   regex functions. After loading this module, see show -gcv * for a list of
+   these. */
+
+namespace __C;
+extern void pure_sys_vars(); pure_sys_vars;
+namespace;
+
+/* ..
+
+   Errno and Friends
+   -----------------
+
+   .. function:: errno
+                 set_errno n
+                 perror msg
+                 strerror n
+
+      This value and the related routines are indispensable to give proper
+      diagnostics when system calls fail for some reason. Note that, by its
+      very nature, :func:`errno` is a fairly volatile value, don't expect it
+      to survive a return to the command line in interactive sessions.
+
+   Example::
+
+     > using system;
+     > fopen "junk" "r", perror "junk";
+     junk: No such file or directory
+     fopen "junk" "r"
+
+*/
+
+extern int pure_errno() = errno, void pure_set_errno(int) = set_errno;
+extern void perror(char*), char* strerror(int);
+
+/* ..
+
+   POSIX Locale
+   ------------
+
+   .. function:: setlocale category locale
+
+      Set or retrieve the current locale.
+
+   Details are platform-specific, but you can expect that at least the
+   categories :const:`LC_ALL`, :const:`LC_COLLATE`, :const:`LC_CTYPE`,
+   :const:`LC_MONETARY`, :const:`LC_NUMERIC` and :const:`LC_TIME` are defined,
+   as well as the following values for the locale parameter: ``"C"`` or
+   ``"POSIX"`` (the default POSIX locale), ``""`` (the system default locale),
+   and :const:`NULL`, to just query the current locale.
+
+   Other string values which can be passed as the locale argument depend on
+   the implementation, please check your local setlocale(3) documentation for
+   details. If locale is not :const:`NULL`, the current locale is changed
+   accordingly. The return value is the new locale, or the current locale when
+   passing :const:`NULL` for the locale parameter. In either case, the string
+   returned by :func:`setlocale` is such that it can be passed to
+   :func:`setlocale` to restore the same locale again. In case of an error,
+   :func:`setlocale` fails (rather than returning a null pointer).
+
+   Please note that calling this function alters the Pure interpreter's idea
+   of what the current locale is. When the interpreter starts up, it always
+   sets the default system locale. Unless your scripts rely on a specific
+   encoding, setting the locale to either ``"C"`` or ``""`` should always be
+   safe.
+
+   Example::
+
+     > setlocale LC_ALL NULL;
+     "en_US.UTF-8"
+
+*/
+
+extern char* setlocale(int category, char* locale);
+
+/* ..
+
+   Signal Handling
+   ---------------
+
+   .. function:: trap action sig
+
+      Establish or remove Pure signal handlers.
+
+   The action parameter of :func:`trap` can be one of the predefined integer
+   values :const:`SIG_TRAP`, :const:`SIG_IGN` and :const:`SIG_DFL`.
+   :const:`SIG_TRAP` causes the given signal to be handled by mapping it to a
+   Pure exception of the form ``signal sig``. :const:`SIG_IGN` ignores the
+   signal, :const:`SIG_DFL` reverts to the system's default handling. See
+   ``show -g SIG*`` for a list of known signal values on your system.
+
+   Note: When the interpreter runs interactively, most standard termination
+   signals (:const:`SIGINT`, :const:`SIGTERM`, etc.) are already set up to
+   report corresponding Pure exceptions; if this is not desired, you can use
+   :func:`trap` to either ignore these or revert to the default handlers
+   instead.
+
+   See :ref:`Exception Handling` in the Pure Manual for details and
+   examples. */
+
+extern void pure_trap(int action, int sig) = trap;
+
+/* ..
+
+   Time Functions
+   --------------
+
+   The usual date/time functions from the C library are all provided. This
+   includes some functions to retrieve wallclock and cpu time which usually
+   offer much better resolution than the venerable :func:`time` function.
+
+   .. function:: time
+
+      Reports the current time in seconds since the `epoch`, 00:00:00 UTC, Jan
+      1 1970. The result is always a bigint (in fact, the :func:`time` value
+      is already 64 bit on many OSes nowadays). */
+
+extern int64 pure_time() = time;
+
+/* .. function:: gettimeofday
+
+      Returns wallclock time as seconds since the epoch, like :func:`time`,
+      but theoretically offers resolutions in the microsec range (actual
+      resolutions vary, but are usually in the msec range for contemporary
+      systems). The result is returned as a double value (which also limits
+      precision). This function may actually be implemented through different
+      system calls, depending on what's available on the host OS. */
+
+extern double pure_gettimeofday() = gettimeofday;
+
+/* .. function:: clock
+
+      Returns the current CPU (not wallclock) time since an arbitrary point in
+      the past, as a machine int. The number of "ticks" per second is given by
+      the :const:`CLOCKS_PER_SEC` constant. Note that this value will wrap
+      around approximately every 72 minutes. */
+
+extern int clock();
+
+/* .. function:: sleep t
+                 nanosleep t
+
+      Suspend execution for a given time interval in seconds. :func:`sleep`
+      takes integer (int/bigint) arguments only and uses the ``sleep()``
+      system function. :func:`nanosleep` also accepts double arguments and
+      theoretically supports resolutions down to 1 nanosecond (again, actual
+      resolutions vary). This function may actually be implemented through
+      different system calls, depending on what's available on the host
+      OS. Both functions usually return zero, unless the sleep was interrupted
+      by a signal, in which case the time remaining to be slept is returned.
+
+   Examples::
+
+     > time,sleep 1,time;
+     1270241703L,0,1270241704L
+     > gettimeofday,nanosleep 0.1,gettimeofday;
+     1270241709.06338,0.0,1270241709.16341
+
+   Here's a little macro which lets you time evaluations::
+
+     def timex x = y,(t2-t1)/CLOCKS_PER_SEC when
+       t1 = clock; y = x; t2 = clock;
+     end;
+
+   Example::
+
+     > timex (foldl (+) 0 (1..100000));
+     705082704,0.07
+
+*/
+
+extern int sleep(int);
+extern double pure_nanosleep(double) = nanosleep;
+
+nanosleep t::int | nanosleep t::bigint = nanosleep (double t);
+
+/* .. function:: tzset
+
+      Initialize timezone information.
+
+   .. variable:: tzname
+                 timezone
+                 daylight
+
+      The timezone information.
+
+   The :func:`tzset` function calls the corresponding routine from the C
+   library and initializes the (Pure) variables :var:`tzname`, :var:`timezone`
+   and :var:`daylight` accordingly. See the tzset(3) manual page for
+   details. This routine is also called automatically when the system module
+   is loaded, so you only have to invoke it to get up-to-date information
+   after changes to the locale or the timezone. Example::
+
+     > tzset;
+     ()
+     > tzname, timezone, daylight;
+     ["CET","CEST"],-3600,1
+     > tzname!daylight;
+     "CEST"
+
+*/
+
+extern void pure_tzset() = tzset;
+
+/* ..
+
+   The following functions deal with date/time values in string and
+   "broken-down" time format. See the ctime(3), gmtime(3), localtime(3),
+   mktime(3), asctime(3), strftime(3) and strptime(3) manual pages for
+   details.
+
+   .. function:: ctime t
+
+      Convert a time value as returned by the :func:`time` function to a
+      string in local time.
+
+   .. function:: gmtime t
+                 localtime t
+
+      Convert a time value to UTC or local time in "broken-down" form (a
+      static pointer to a ``tm`` struct containing a bunch of ``int`` fields)
+      which can then be passed to the :func:`asctime` and :func:`strftime`
+      functions, or to :func:`int_matrix` if you want to convert the data to a
+      matrix; see the example below.
+
+   .. function:: mktime tm
+
+      Converts broken-down time to a time value (seconds since the epoch). As
+      with :func:`time`, the result is always a bigint.
+
+   .. function:: asctime tm
+                 strftime format tm
+
+      Format broken-down time as a string. :func:`strftime` also uses a format
+      string supplied by the user, see below for a list of the most important
+      conversion specifiers.
+
+   .. function:: strptime s format tm
+
+      Parse a date/time string ``s`` according to the given format (using more
+      or less the same format specifiers as the :func:`strftime` function) and
+      store the broken-down time result in the given ``tm`` struct. This
+      function may fail, e.g., if :func:`strptime` finds an error in the
+      format string. Otherwise it returns the part of the string which wasn't
+      processed, see the example below.
+
+   Examples::
+
+     > let t = time; t;
+     1270239790L
+     > let tm = localtime t; tm;
+     #<pointer 0x7ff97ecbdde0>
+     > mktime tm;
+     1270239790L
+     > asctime tm;
+     "Fri Apr  2 22:23:10 2010\n"
+     > int_matrix 9 tm;
+     {10,23,22,2,3,110,5,91,1}
+     > strftime "%c" tm;
+     "Fri 02 Apr 2010 10:23:10 PM CEST"
+     > strptime ans "%c" tm, int_matrix 9 tm;
+     "CEST",{10,23,22,2,3,110,5,91,1}
+
+   In the above example, :func:`strptime` was given a static pointer to a
+   ``tm`` struct returned by :func:`localtime`. This always works, but in some
+   situations it may be preferable to allocate dynamic storage instead. This
+   storage should be properly initialized (zeroed out) before passing it to
+   :func:`strptime`, since :func:`strptime` only stores the values specified
+   (at least in principle; please consult your local C library documentation
+   for details). Also note that while POSIX only specifies nine ``int`` fields
+   in a ``tm`` struct, depending on the host operating system the struct may
+   contain additional public and private fields. The actual size of a ``tm``
+   struct is given by the :const:`SIZEOF_TM` constant, so a safe way to
+   allocate suitable dynamic storage for the :func:`strptime` function is as
+   follows::
+
+     > let tm = pointer_cast "int*" $ calloc 1 SIZEOF_TM;
+     > strptime "4/2/10" "%D" tm, int_matrix 9 tm;
+     "",{0,0,0,2,3,110,5,91,0}
+
+   Instead of explicitly allocating dynamic storage and converting it to a
+   Pure matrix later, you can also invoke :func:`strptime` directly with an
+   int matrix of sufficient size::
+
+     > let tm = imatrix (SIZEOF_TM div SIZEOF_INT + 1);
+     > strptime "4/2/10" "%D" tm, take 9 tm;
+     "",{0,0,0,2,3,110,5,91,0}
+
+   Last but not least, to make calling :func:`strptime` more convenient, you
+   can supply your own little wrapper function which takes care of allocating
+   the storage, e.g.::
+
+     mystrptime s format = s,take 9 tm when
+       tm = imatrix (SIZEOF_TM div SIZEOF_INT + 1);
+       s = strptime s format tm;
+     end;
+
+     > mystrptime "4/2/10" "%D";
+     "",{0,0,0,2,3,110,5,91,0}
+
+   Here is a list of some common format specifiers which can be used with the
+   :func:`strftime` and :func:`strptime` routines. These are all specified by
+   POSIX and should thus be available on most platforms. Note that many more
+   formats are usually supported than what is listed here, so please consult
+   your local manual pages for the complete list.
+
+   * ``%d``, ``%m``, ``%y``: Day of the month, month and year as decimal
+     two-digit numbers.
+
+   * ``%Y``: The year as a four-digit number which includes the century.
+
+   * ``%H``, ``%M``, ``%S``: Hours (range ``00`` to ``23``), minutes and
+     seconds as decimal two-digit numbers.
+
+   * ``%I``: The hours on a 12-hour clock (range ``01`` to ``12``).
+
+   The following formats are locale-dependent:
+
+   * ``%a``, ``%A``: Abbreviated and full weekday name.
+
+   * ``%b``, ``%B``: Abbreviated and full month name.
+
+   * ``%p``: AM or PM. ``%P`` is the same in lowercase (``strftime`` only).
+
+   There are also some useful meta-formats which specify various combinations
+   of the above:
+
+   * ``%c``: The preferred date and time representation for the current locale.
+
+   * ``%D``: The American date format (``%m/%d/%y``).
+
+   * ``%F``: The ISO 8601 date format (``%Y-%m-%d``). (This is generally
+     supported by :func:`strftime` only, but :func:`strptime` from GNU libc
+     has it.)
+
+   * ``%r``: The time in AM/PM notation (``%I:%M:%S %p``).
+
+   * ``%R``: The time in 24-hour notation (``%H:%M``).
+
+   * ``%T``: The time in 24-hour notation, including seconds (``%H:%M:%S``).
+
+   In addition, ``%%`` denotes a literal ``%`` character, ``%n`` newlines and
+   ``%t`` tabs. (For :func:`strptime` the latter two are synonymous and match
+   arbitrary whitespace.)
+
+   Windows users should note that :func:`strptime` isn't natively supported
+   there. A basic emulation is provided by the Pure runtime, but at present
+   this only supports the C locale. */
+
+extern char* pure_ctime(int64) = ctime;
+extern int*  pure_gmtime(int64) = gmtime;
+extern int*  pure_localtime(int64) = localtime;
+extern int64 pure_mktime(int *tm) = mktime;
+extern char* asctime(int *tm);
+extern char* pure_strftime(char *format, int *tm) = strftime;
+extern expr* pure_strptime(char *s, char *format, int *tm) = strptime;
+
+/* ..
+
+   Process Functions
+   -----------------
+
+   The following process functions are available on all systems. (Some
+   additional process-related functions such as :func:`fork`, :func:`kill`,
+   :func:`wait` and :func:`waitpid` are available in the :mod:`posix` module,
+   see `Additional POSIX Functions`_.)
+
+   .. function:: system cmd
+
+      Execute a shell command.
+
+   .. function:: execv prog argv
+                 execvp prog argv
+                 execve prog argv envp
+
+      Execute a new process. ``prog`` denotes the name of the executable to be
+      run, ``argv`` the argument vector (which repeats the program name in the
+      first component), and ``envp`` a vector of environment strings of the
+      form ``"var=value"``. The :func:`execv` function executes the program
+      ``prog`` exactly as given, while :func:`execvp` also performs a path
+      search. The :func:`execve` function is like :func:`execv`, but also
+      specifies an environment to be passed to the process. In either case,
+      the new process replaces the current process. For convenience, both
+      ``argv`` and ``envp`` can be specified as a Pure string vector or a
+      list, which is automatically translated to the raw,
+      :const:`NULL`-terminated C string vectors (i.e., ``char**``) required by
+      the underlying C functions.
+
+   .. function:: spawnv mode prog argv
+                 spawnvp mode prog argv
+                 spawnve mode prog argv envp
+
+      Spawn a new child process. These work like the corresponding MS Windows
+      functions; on Un*x systems this functionality is implemented using a
+      combination of :func:`fork` and :func:`execv`. The arguments are the
+      same as for the :func:`execv` functions, except that there's an
+      additional ``mode`` argument which specifies how the process is to be
+      executed: :const:`P_WAIT` waits for the process to finish, after which
+      :func:`spawnv` returns with the exit status of the terminated child
+      process; :const:`P_NOWAIT` makes :func:`spawnv` return immediately,
+      returning the process id; and :const:`P_OVERLAY` causes the child
+      process to replace its parent, just like with :func:`execv`. (On
+      Windows, there's an additional :const:`P_DETACH` flag which works like
+      :const:`P_NOWAIT` but also turns the child process into a background
+      task.)
+
+   Note that, in addition, the prelude provides the :func:`exit` function
+   which terminates the program with a given exit code, cf. `Other Special
+   Primitives`_.
+
+   Examples::
+
+     > system "pwd";
+     /home/ag/svn/pure-lang/trunk/pure/lib
+     0
+     > spawnvp P_WAIT "pwd" ["pwd"];
+     /home/ag/svn/pure-lang/trunk/pure/lib
+     0
+     > spawnv P_WAIT "/bin/sh" ["/bin/sh","-c","pwd"];
+     /home/ag/svn/pure-lang/trunk/pure/lib
+     0
+
+*/
+
+extern void exit(int status);
+extern int system(char* cmd);
+
+extern int execv(char *prog, char **argv);
+extern int execvp(char *prog, char **argv);
+extern int execve(char *prog, char **argv, char **envp);
+
+execv prog::string argv =
+  execv prog (smatrix argv) if listp argv;
+execvp prog::string argv =
+  execvp prog (smatrix argv) if listp argv;
+execve prog::string argv envp =
+  execve prog (smatrix argv) (smatrix envp)
+  if listp argv && listp envp;
+
+extern int spawnv(int mode, char *prog, char **argv);
+extern int spawnvp(int mode, char *prog, char **argv);
+extern int spawnve(int mode, char *prog, char **argv, char **envp);
+
+spawnv mode::int prog::string argv =
+  spawnv mode prog (smatrix argv) if listp argv;
+spawnvp mode::int prog::string argv =
+  spawnvp mode prog (smatrix argv) if listp argv;
+spawnve mode::int prog::string argv envp =
+  spawnve mode prog (smatrix argv) (smatrix envp)
+  if listp argv && listp envp;
+
+/* ..
+
+   Basic I/O Interface
+   -------------------
+
+   Note that this module also defines the standard I/O streams :var:`stdin`,
+   :var:`stdout` and :var:`stderr` as variables on startup. These are ready to
+   be used with the operations described below. Also note that for convenience
+   some of the following routines are actually Pure wrappers, rather than just
+   providing the raw C library routines.
+
+   .. variable:: stdin
+      		 stdout
+		 stderr
+
+      The standard I/O streams.
+
+   .. function:: fopen name mode
+                 popen cmd mode
+
+      Open a file or a pipe. These take care of closing a file object
+      automagically when it's garbage-collected, and fail (instead of
+      returning a null pointer) in case of error, so that you can provide any
+      desired error handling simply by adding suitable equations.
+
+   .. function:: fdopen fd mode
+
+      Associates a file object with a given existing file descriptor.
+      Otherwise works like :func:`fopen`, so the resulting file is closed
+      automatically when it's garbage-collected.
+
+   .. function:: freopen path mode fp
+
+      Reopens a file object. The existing file object is closed. Otherwise
+      works like :func:`fopen`, so the resulting file is closed automatically
+      when it's garbage-collected.
+
+   .. function:: fclose fp
+                 pclose fp
+
+      Close a file or a pipe.
+
+   .. function:: tmpfile
+
+      Creates a unique temporary file (opened in ``"w+b"`` mode) which gets
+      deleted automatically when it is closed or the file object gets
+      garbage-collected.
+
+   .. function:: feof fp
+                 ferror fp
+                 clearerr fp
+
+      Check the end-of-file and error bits. :func:`clearerr` clears the error
+      bit.
+
+   .. function:: fileno fp
+
+      Returns the file descriptor associated with the given file.
+
+   .. function:: fflush fp
+
+      Flushes the given file (or all open files if ``fp`` is :const:`NULL`).
+
+   .. function:: fgets fp
+                 gets
+
+      Pure wrappers for the C ``fgets`` and ``gets`` functions which handle
+      the necessary buffering automatically.
+
+   .. function:: fget fp
+
+      A variation of :func:`fgets` which slurps in an entire text file at
+      once.
+
+   .. function:: fputs s fp
+                 puts s
+
+      Output a string to the given file or :var:`stdout`, respectively. These
+      are just the plain C functions. Note that :func:`puts` automatically
+      adds a newline, while :func:`fputs` doesn't. Hmm.
+
+   .. function:: fread ptr size nmemb fp
+                 fwrite ptr size nmemb fp
+
+      Binary read/writes. Here you'll have to manage the buffers yourself.
+      See the corresponding manual pages for details.
+
+   .. function:: fseek fp offset whence
+                 ftell fp
+                 rewind fp
+
+      Reposition the file pointer and retrieve its current value. The
+      constants :const:`SEEK_SET`, :const:`SEEK_CUR` and :const:`SEEK_END` can
+      be used for the ``whence`` argument of :func:`fseek`. The call ``rewind
+      fp`` is equivalent to ``fseek fp 0 SEEK_SET`` (except that the latter
+      also returns a result code). See the corresponding manual pages for
+      details.
+
+   .. function:: setbuf fp buf
+                 setvbuf fp buf mode size
+
+      Set the buffering of a file object, given as the first argument. The
+      second argument specifies the buffer, which must be a pointer to
+      suitably allocated memory or :const:`NULL`. The ``mode`` argument of
+      :func:`setvbuf` specifies the buffering mode, which may be one of the
+      predefined constants :const:`_IONBF`, :const:`_IOLBF` and
+      :const:`_IOFBF` denoting no buffering, line buffering and full
+      (a.k.a. block) buffering, respectively; the ``size`` argument denotes
+      the buffer size.
+
+      For :func:`setbuf`, the given buffer must be able to hold
+      :const:`BUFSIZ` characters, where :const:`BUFSIZ` is a constant defined
+      by this module.  ``setbuf fp buf`` is actually equivalent to the
+      following call (except that :func:`setvbuf` also returns an integer
+      return value)::
+
+        setvbuf fp buf (if null buf then _IONBF else _IOFBF) BUFSIZ
+
+      Please see the setbuf(3) manual page for details.
+
+   Examples::
+
+     > puts "Hello, world!";
+     Hello, world!
+     14
+
+     > map fileno [stdin,stdout,stderr];
+     [0,1,2]
+
+     > let fp = fopen "/etc/passwd" "r";
+     > fgets fp;
+     "at:x:25:25:Batch jobs daemon:/var/spool/atjobs:/bin/bash\n"
+     > fgets fp;
+     "avahi:x:103:104:User for Avahi:/var/run/avahi-daemon:/bin/false\n"
+     > ftell fp;
+     121L
+     > rewind fp;
+     ()
+     > fgets fp;
+     "at:x:25:25:Batch jobs daemon:/var/spool/atjobs:/bin/bash\n"
+
+     > split "\n" $ fget $ popen "ls *.pure" "r";
+     ["array.pure","dict.pure","getopt.pure","heap.pure","math.pure",
+     "matrices.pure","prelude.pure","primitives.pure","quasiquote2.pure",
+     "quasiquote.pure","set.pure","strings.pure","system.pure",""]
+
+*/
+
+namespace __C;
+extern FILE* fopen(char* name, char* mode);
+extern FILE* popen(char* cmd, char* mode);
+extern FILE* fdopen(int fd, char* mode);
+extern FILE* freopen(char* name, char* mode, FILE* fp);
+extern int fclose(FILE* fp), int pclose(FILE* fp);
+extern char* fgets(void* buf, int size, FILE* fp);
+namespace;
+
+extern FILE* tmpfile();
+extern int fflush(FILE* fp);
+extern int fputs(char* s, FILE* fp), int puts(char* s);
+extern size_t fread(void* ptr, size_t size, size_t nmemb, FILE* fp);
+extern size_t fwrite(void* ptr, size_t size, size_t nmemb, FILE* fp);
+extern void clearerr(FILE* fp);
+extern int feof(FILE* fp), int ferror(FILE* fp);
+extern int fileno(FILE* fp);
+
+extern int fseek(FILE* fp, long offset, int whence);
+extern long ftell(FILE *fp);
+extern void rewind(FILE *fp);
+
+extern void setbuf(FILE* fp, void* buf);
+extern int setvbuf(FILE* fp, void* buf, int mode, size_t size);
+
+/* Pure wrappers for fopen/fdopen/freopen/popen and fclose/pclose which take
+   care of closing a file object automagically when it's garbage-collected.
+   Please note that these fail (instead of returning a null pointer) in case
+   of error, so that you can provide any desired error handling simply by
+   adding suitable equations. */
+
+fopen name::string mode::string = sentry __C::fclose fp if ~null fp
+when fp = __C::fopen name mode end;
+
+fdopen fd::int mode::string = sentry __C::fclose fp if ~null fp
+when fp = __C::fdopen fd mode end;
+
+freopen name::string mode::string fp::pointer = sentry __C::fclose fp
+if ~null fp when
+  fp = if get_sentry fp === __C::fclose then
+         clear_sentry fp $$ __C::freopen name mode fp
+       else NULL;
+end;
+
+popen name::string mode::string = sentry __C::pclose fp if ~null fp
+when fp = __C::popen name mode end;
+
+fclose fp::pointer = clear_sentry fp $$ __C::fclose fp
+if get_sentry fp === __C::fclose;
+pclose fp::pointer = clear_sentry fp $$ __C::pclose fp
+if get_sentry fp === __C::pclose;
+
+/* Pure wrappers for fgets and gets which handle the necessary buffering
+   automatically. */
+
+fgets f::pointer = read_a_line f buf [] when buf = malloc 1024 end
+with read_a_line f buf t = check s when s = __C::fgets buf 1024 f end
+  with check s::string   = return (s:t) if done s;
+                         = read_a_line f buf (s:t) otherwise;
+       check s           = return s if null t;
+                         = return t otherwise;
+       done s::string    = feof f || ferror f || ~null s && last s == "\n";
+       return x::pointer = free buf $$ x;
+       return x          = free buf $$ strcat $ reverse $ x;
+  end;
+end;
+
+gets = if null s then s else if last s == "\n" then init s else s
+when s = fgets stdin end;
+
+/* A variation of fgets which slurps in an entire text file at once. */
+
+fget f::pointer = read_a_file f buf [] when buf = malloc 0x10000 end
+with read_a_file f buf t = check s when s = __C::fgets buf 0x10000 f end
+  with check s::string   = return (s:t) if feof f || ferror f;
+                         = read_a_file f buf (s:t) otherwise;
+       check s           = return s if null t;
+                         = return t otherwise;
+       return x::pointer = free buf $$ x;
+       return x          = free buf $$ strcat $ reverse $ x;
+  end;
+end;
+
+/* ..
+
+   C-style formatted I/O is provided through the following wrappers for the C
+   ``printf`` and ``scanf`` functions. Our wrapper functions take or return a
+   tuple of values, and check these against the format specifiers, so they
+   shouldn't segfault. However, only simple formats derived from ``%cdioux``,
+   ``%efg``, ``%s`` and ``%p`` are supported right now.
+
+   .. function:: printf format args
+                 fprintf fp format args
+
+      Print a formatted string to :var:`stdout` or the given file,
+      respectively. Normally, these functions return the result of the
+      underlying C routines (number of characters written, or negative on
+      error). However, in case of an abnormal condition in the wrapper
+      function (error in format string, argument mismatch), they will throw an
+      exception.
+
+   .. function:: sprintf format args
+
+      Print a formatted string to a buffer and return the result as a string.
+      Unlike the C routine, this wrapper just returns the string result, or a
+      null pointer in case of an error; otherwise, the error handling is the
+      same as with :func:`printf` and :func:`fprintf`. The implementation
+      actually uses the C routine ``snprintf`` for safety, and a suitable
+      output buffer is provided automatically. */
+
+/* Since Pure cannot call C varargs functions directly, the runtime provides
+   us with some functions which only process a single argument at a time. */
+
+using namespace __C, system;
+
+namespace __C;
+extern int pure_fprintf(FILE *fp, char *format);
+extern int pure_fprintf_int(FILE *fp, char *format, int x);
+extern int pure_fprintf_double(FILE *fp, char *format, double x);
+extern int pure_fprintf_string(FILE *fp, char *format, char *x);
+extern int pure_fprintf_pointer(FILE *fp, char *format, void *x);
+namespace;
+
+public printf_error printf_value_error printf_format_error;
+public this_cant_happen;
+
+namespace system;
+public printf_split_format printf_format_spec printf_format_str;
+namespace;
+
+public fprintf;
+
+printf format::string args = fprintf stdout format args;
+
+fprintf fp::pointer format::string args = count when
+  args = if tuplep args then list args else [args];
+  count, _ = catch error_handler
+    (foldl (do_fprintf fp) (0,args) $ printf_split_format format);
+end with
+  error_handler (printf_error res::int) = res, [];
+  error_handler x = throw x otherwise;
+  do_fprintf fp (count,arg:args) (printf_format_spec t s) = count, args
+  when
+    res = case t, arg of
+      "c", x::int | "c", x::bigint |
+      "d", x::int | "d", x::bigint = pure_fprintf_int fp s x;
+      "g", x::double = pure_fprintf_double fp s x;
+      "s", x::string = pure_fprintf_string fp s x;
+      "p", x::string | "p", x::pointer = pure_fprintf_pointer fp s x;
+      _ = throw (printf_value_error s arg);
+    end;
+    count = if res>=0 then count+res else throw (printf_error res);
+  end;
+  do_fprintf fp (count,args) (printf_format_str s) = count, args
+  when
+    res = pure_fprintf fp s;
+    count = if res>=0 then count+res else throw (printf_error res);
+  end;
+  do_fprintf fp (count,[]) (printf_format_spec t s) =
+    throw (printf_value_error s ());
+  do_fprintf fp (count,_) _ = throw (this_cant_happen count);
+end;
+
+public regex regexg reg regerr; // see below
+
+printf_split_format format = regexg analyze
+  "(%[-#0 ]?[0-9]*([.][0-9]*)?[cdiouxXeEfgGsp])|(%)|([^%]|%%)+"
+  REG_EXTENDED format 0
+with
+  analyze info =
+    if p>=0 then // format specifier
+      printf_format_spec (format_type (last u)) u
+    else if q>=0 then // error
+      throw (printf_format_error q)
+    else printf_format_str u // literal
+  when
+    _, u = reg 0 info; // matched portion of the format string
+    p, _ = reg 1 info; // p>=0 indicates valid format specifier
+    q, _ = reg 3 info; // q>=0 indicates unrecognized format specifier
+  end;
+  format_type x = 
+    if index "diouxX" x >= 0 then "d"
+    else if index "eEfgG" x >= 0 then "g"
+    else x;
+end;
+
+namespace __C;
+extern int pure_snprintf(void *buf, int, char *format);
+extern int pure_snprintf_int(void *buf, int, char *format, int x);
+extern int pure_snprintf_double(void *buf, int, char *format, double x);
+extern int pure_snprintf_string(void *buf, int, char *format, char *x);
+extern int pure_snprintf_pointer(void *buf, int, char *format, void *x);
+namespace;
+
+sprintf format::string args = s when
+  args = if tuplep args then list args else [args];
+  u, _ = catch error_handler
+    (foldl do_sprintf ([],args) $ printf_split_format format);
+  s = if pointerp u then u else strcat $ reverse u;
+end with
+  error_handler (printf_error res::int) = pointer 0, [];
+  error_handler x = throw x otherwise;
+  do_sprintf (u,arg:args) (printf_format_spec t s) = u, args
+  when
+    size = case t, arg of
+      "s", x::string = #s+#x; // guestimate
+      _ = 64; // should be enough for number formats in any case
+    end;
+    size = size+1024; // max padding
+    buf = check_buf (malloc size);
+    res = case t, arg of
+      "c", x::int | "c", x::bigint |
+      "d", x::int | "d", x::bigint = pure_snprintf_int buf size s x;
+      "g", x::double = pure_snprintf_double buf size s x;
+      "s", x::string = pure_snprintf_string buf size s x;
+      "p", x::string | "p", x::pointer = pure_snprintf_pointer buf size s x;
+      _ = free buf $$ throw (printf_value_error s arg);
+    end;
+    u = if res>=0 then cstring buf : u
+        else free buf $$ throw (printf_error res);
+  end;
+  do_sprintf (u,args) (printf_format_str s) = u, args
+  when
+    size = #s+1000; buf = check_buf (malloc size);
+    res = pure_snprintf buf size s;
+    u = if res>=0 then cstring buf : u
+        else free buf $$ throw (printf_error res);
+  end;
+  do_sprintf (u,[]) (printf_format_spec t s) =
+    throw (printf_value_error s ());
+  do_sprintf (u,_) _ = throw (this_cant_happen $ strcat $ reverse u);
+  check_buf buf = throw malloc_error if null buf;
+                = buf otherwise;
+end;
+
+/* .. function:: scanf format
+                 fscanf fp format
+
+      Read formatted input from :var:`stdin` or the given file, respectively.
+      These normally return a tuple (or singleton) with the converted
+      values. An exception of the form ``scanf_error ret``, where ``ret`` is
+      the tuple of successfully converted values (which may be less than the
+      number of requested input items), is thrown if end-of-file was met or
+      another error occurred while still reading. The handling of other
+      abnormal conditions (e.g., error in format string) is analogous to
+      :func:`printf` et al. Also note that our implementation here doesn't
+      accept any of the length modifiers used by the C routines. Floating
+      point values will *always* be read in double precision, so you just
+      specify ``"e"``, ``"g"`` etc. for these. However, the "assignment
+      suppression" flag ``"*"`` *is* understood; the corresponding items will
+      not be returned. */
+
+namespace __C;
+extern int pure_fscanf(FILE *fp, char *format);
+extern int pure_fscanf_int(FILE *fp, char *format, void *x);
+extern int pure_fscanf_double(FILE *fp, char *format, void *x);
+extern int pure_fscanf_string(FILE *fp, char *format, void *x);
+extern int pure_fscanf_pointer(FILE *fp, char *format, void *x);
+namespace;
+
+public scanf_error scanf_format_error;
+
+namespace system;
+public scanf_split_format scanf_format_spec scanf_format_str;
+namespace;
+
+public fscanf;
+
+scanf format::string = fscanf stdin format;
+
+fscanf fp::pointer format::string = tuple $ reverse ret when
+  _, ret = catch error_handler
+    (foldl (do_fscanf fp) (0,[]) $ scanf_split_format format);
+end with
+  error_handler (scanf_error ret) = throw (scanf_error (tuple $ reverse ret));
+  error_handler x = throw x otherwise;
+  do_fscanf fp (nread,ret) (scanf_format_spec t s) = nread+res, ret
+  when
+    // 16 bytes should be more than enough to hold any elementary type;
+    // for the string case, see guestimate below.
+    size, s = if t=="s" then guestimate s else 16, s;
+    // Make sure to zero the buffer here, since %c doesn't store a terminal
+    // null byte.
+    buf = check_buf (calloc size 1);
+    res = case t of
+      "n" = pure_fscanf_int fp s buf;
+      "d" = pure_fscanf_int fp s buf;
+      "g" = pure_fscanf_double fp s buf;
+      "s" = pure_fscanf_string fp s buf;
+      "p" = pure_fscanf_pointer fp s buf;
+      _ = throw (this_cant_happen ret);
+    end;
+    // Note: In difference to C scanf, the return value is the number of read
+    // characters here, with -1 denoting an error condition.
+    res = if res>=0 then res
+          else free buf $$ throw (scanf_error ret);
+    val = case t of
+      "n" = nread+get_int buf;
+      "d" = get_int buf;
+      "g" = get_double buf;
+      "s" = cstring buf;
+      "p" = get_pointer buf;
+      _ = throw (this_cant_happen ret);
+    end;
+    _ = if t=="s" then () else free buf;
+    ret = val:ret;
+  end;
+  do_fscanf fp (nread,ret) (scanf_format_str s) = nread+res, ret
+  when
+    res = pure_fscanf fp s;
+    ret = if res>=0 then ret else throw (scanf_error ret);
+  end;
+  do_fscanf _ (_,ret) _ = throw (this_cant_happen ret);
+  check_buf buf = throw malloc_error if null buf;
+                = buf otherwise;
+  // Compute a reasonable size for a string buffer; if necessary, modify the
+  // field width of the format accordingly.
+  guestimate "%c" = 2, "%c";
+  guestimate format = n, format
+  when
+    1,0,_,1,s = regex "^%([0-9]*)" REG_EXTENDED format 0;
+    // Leave one extra byte for the null terminator.
+    n, format = if null s then 1025, "%1024"+tail format else eval s+1, format;
+  end;
+end;
+
+scanf_split_format format = regexg analyze
+  "(%[*]?[0-9]*([cdiouxXneEfgsp]|\\[\\^?\\]?[^]]+\\]))|(%)|([^%]|%%)+"
+  REG_EXTENDED format 0
+with
+  analyze info =
+    if p>=0 && u!1~="*" then // format specifier
+      (scanf_format_spec t (kludge t u) when t = format_type (last u) end)
+    else if q>=0 then // error
+      throw (scanf_format_error q)
+    else scanf_format_str u // literal
+  when
+    _, u = reg 0 info; // matched portion of the format string
+    p, _ = reg 1 info; // p>=0 indicates valid format specifier
+    q, _ = reg 3 info; // q>=0 indicates unrecognized format specifier
+  end;
+  format_type x = 
+    if x == "n" then "n"
+    else if index "diouxX" x >= 0 then "d"
+    else if index "eEfg" x >= 0 then "g"
+    else if x=="]" || x=="c" then "s"
+    else x;
+  // fix up the format specifier for double values (needs 'l' modifier)
+  kludge "g" u = init u + "l" + last u;
+  kludge _ u = u otherwise;
+end;
+
+/* .. function:: sscanf s format
+
+      This works exactly like :func:`fscanf`, but input comes from a string
+      (first argument) rather than a file.
+
+   Examples::
+
+     > do (printf "%s%d\n") [("foo",5),("catch",22)];
+     foo5
+     catch22
+     ()
+     > sscanf "foo 5 22" "%s %d %g";
+     "foo",5,22.0
+
+*/
+
+namespace __C;
+extern int pure_sscanf(char *buf, char *format);
+extern int pure_sscanf_int(char *buf, char *format, void *x);
+extern int pure_sscanf_double(char *buf, char *format, void *x);
+extern int pure_sscanf_string(char *buf, char *format, void *x);
+extern int pure_sscanf_pointer(char *buf, char *format, void *x);
+namespace;
+
+sscanf s::string format::string = tuple $ reverse ret when
+  _, _, ret = catch error_handler
+    (foldl do_sscanf (s,0,[]) $ scanf_split_format format);
+end with
+  error_handler (scanf_error ret) = throw (scanf_error (tuple $ reverse ret));
+  error_handler x = throw x otherwise;
+  do_sscanf (u,nread,ret) (scanf_format_spec t s) = u, nread+res, ret
+  when
+    // 16 bytes should be more than enough to hold any elementary type;
+    // for the string case, see guestimate below.
+    size, s = if t=="s" then guestimate s else 16, s;
+    // Make sure to zero the buffer here, since %c doesn't store a terminal
+    // null byte.
+    buf = check_buf (calloc size 1);
+    res = case t of
+      "n" = pure_sscanf_int u s buf;
+      "d" = pure_sscanf_int u s buf;
+      "g" = pure_sscanf_double u s buf;
+      "s" = pure_sscanf_string u s buf;
+      "p" = pure_sscanf_pointer u s buf;
+      _ = throw (this_cant_happen ret);
+    end;
+    // Note: In difference to C scanf, the return value is the number of read
+    // characters here, with -1 denoting an error condition.
+    res = if res>=0 then res
+          else free buf $$ throw (scanf_error ret);
+    val = case t of
+      "n" = nread+get_int buf;
+      "d" = get_int buf;
+      "g" = get_double buf;
+      "s" = cstring buf;
+      "p" = get_pointer buf;
+      _ = throw (this_cant_happen ret);
+    end;
+    _ = if t=="s" then () else free buf;
+    ret = val:ret;
+    u = drop res u;
+  end;
+  do_sscanf (u,nread,ret) (scanf_format_str s) = u, nread+res, ret
+  when
+    res = pure_sscanf u s;
+    ret = if res>=0 then ret else throw (scanf_error ret);
+    u = drop res u;
+  end;
+  do_sscanf (_,_,ret) _ = throw (this_cant_happen ret);
+  check_buf buf = throw malloc_error if null buf;
+                = buf otherwise;
+  // Compute a reasonable size for a string buffer; if necessary, modify the
+  // field width of the format accordingly.
+  guestimate "%c" = 2, "%c";
+  guestimate format = n, format
+  when
+    1,0,_,1,s = regex "^%([0-9]*)" REG_EXTENDED format 0;
+    // Leave one extra byte for the null terminator.
+    n, format = if null s then 1025, "%1024"+tail format else eval s+1, format;
+  end;
+end;
+
+using namespace;
+
+/* ..
+
+   Stat and Friends
+   ----------------
+
+   .. function:: stat path
+
+      Return information about the given file. This is a simple wrapper around
+      the corresponding system call, see the stat(2) manual page for
+      details. The function returns a tuple with the most important fields
+      from the ``stat`` structure, in this order: ``st_dev``, ``st_ino``,
+      ``st_mode``, ``st_nlink``, ``st_uid``, ``st_gid``, ``st_rdev``,
+      ``st_size``, ``st_atime``, ``st_mtime``, ``st_ctime``. Among these,
+      ``st_mode``, ``st_nlink``, ``st_uid`` and ``st_gid`` are simple machine
+      integers, the rest is encoded as bigints (even on 32 bit platforms).
+
+   .. function:: lstat path
+
+      Return information about the given symbolic link (rather than the file
+      it points to). On systems where this function isn't supported (e.g.,
+      Windows), :func:`lstat` is identical to :func:`stat`.
+
+   .. function:: fstat fp
+
+      Return information about the given file object. Same as :func:`stat`,
+      but here the file is given as a file pointer created with :func:`fopen`
+      (see `Basic I/O Interface`_ above). Note that the corresponding system
+      function actually takes a file descriptor, so the Pure implementation is
+      equivalent to the C call ``fstat(fileno(fp))``. This function might not
+      be supported on all platforms.
+
+   For average applications, the most interesting fields are ``st_mode`` and
+   ``st_size``, which can be retrieved with ``stat filename!![2,7]``. Note
+   that to facilitate access to the ``st_mode`` field, the usual masks and
+   bits for file types (:const:`S_IFMT`, :const:`S_IFREG`, etc.) and
+   permissions (:const:`S_ISUID`, :const:`S_ISGID`, :const:`S_IRWXU`, etc.)
+   are defined as constants by this module.  Use the command ``show -g S_*``
+   in the interpreter to get a full list of these. Other interesting fields
+   are ``st_atime``, ``st_mtime`` and ``st_ctime``, which can be accessed
+   using ``stat filename!!(8..10)``.  The values of these fields are the times
+   of last access, last modification and creation, respectively, which can be
+   decoded using the appropriate time functions like :func:`ctime` or
+   :func:`strftime`, see `Time Functions`_.
+
+   Examples::
+
+     > stat "/etc/passwd";
+     64773L,9726294L,33188,1,0,0,0L,1623L,1250373163L,1242692339L,1242692339L
+     > stat "/etc/passwd"!7;                                // file size
+     1623L
+     > strftime "%c" $ localtime $ stat "/etc/passwd"!10;   // creation time
+     "Tue 19 May 2009 02:18:59 AM CEST"
+     > sprintf "0%o" $ stat "/etc/passwd"!2 and not S_IFMT; // permissions
+     "0644"
+     > stat "/etc/passwd"!2 and S_IFMT == S_IFREG; // this is a regular file
+     1
+     > stat "/etc"!2 and S_IFMT == S_IFDIR;        // this is a directory
+     1
+
+*/
+
+extern expr* pure_stat(char* path) = stat;
+extern expr* pure_lstat(char* path) = lstat;
+extern expr* pure_fstat(FILE* fp) = fstat;
+
+/* ..
+
+   Reading Directories
+   -------------------
+
+   .. function:: readdir name
+
+      Read the contents of the given directory and return the names of all
+      its entries as a list.
+
+   Example::
+
+     > readdir "/home";
+     ["ag",".",".."]
+
+*/
+
+/* This is a little wrapper around the C readdir() interface. */
+
+extern expr *pure_readdir(char *name) = readdir;
+
+/* ..
+
+   Shell Globbing
+   --------------
+
+   .. function:: fnmatch pat s flags
+
+      Returns a simple truth value (1 if ``pat`` matches ``s``, 0 if it
+      doesn't), instead of an error code like the C function.
+
+   .. function:: glob pat flags
+
+      Returns a Pure list with the matches (unless there is an error in which
+      case the integer result code of the underlying C routine is returned).
+
+   The available flag values and glob error codes are available as symbolic
+   :const:`FNM_*` and :const:`GLOB_*` constants defined as variables in the
+   global environment. See the fnmatch(3) and glob(3) manpages for the meaning
+   of these.
+
+   Example::
+
+     > glob "*.pure" 0;
+     ["array.pure","dict.pure","getopt.pure","heap.pure","math.pure",
+     "matrices.pure","prelude.pure","primitives.pure","set.pure",
+     "strings.pure","system.pure"]
+
+*/
+
+namespace __C;
+extern int fnmatch(char* pat, char* s, int flags);
+extern int glob(char* pat, int flags, void* errfunc, void* globptr);
+extern void globfree(void* globptr);
+// runtime function to decode a globptr into a Pure string list
+extern expr* globlist(void* globptr);
+namespace;
+
+fnmatch pat::string s::string flags::int = __C::fnmatch pat s flags == 0;
+
+glob pat::string flags::int = result
+when
+  globptr = calloc 1 SIZEOF_GLOB;
+  result = __C::glob pat flags (pointer 0) globptr;
+  result = if result==0 then __C::globlist globptr else result;
+  __C::globfree globptr; free globptr;
+end;
+
+/* ..
+
+   Regex Matching
+   --------------
+
+   The POSIX regex functions (``regcomp`` and ``regexec``) have a somewhat
+   difficult calling sequence, hence we provide a couple of rather elaborate
+   high-level wrapper functions for use in Pure programs. These are
+   implemented in terms of a low-level interface provided in the runtime. (The
+   low-level interface isn't documented here, but these functions are also
+   callable if you want to create your own regular expression engines in Pure.
+   You might wish to take a look at the implementation of the high-level
+   functions in system.pure to see how this can be done.) */
+
+using namespace __C;
+
+namespace __C;
+// Lowlevel interface to the POSIX regex functions provided in the runtime.
+extern void* pure_regcomp(char* pat, int cflags) = regcomp;
+extern int pure_regexec(void* reg, char* s, int eflags) = regexec;
+extern int pure_regnext(void* reg, int overlap) = regnext;
+extern void pure_regdone(void* reg) = regdone;
+extern void pure_regfree(void* reg) = regfree;
+extern int pure_regstatus(void* reg) = regstatus;
+extern expr* pure_regerror(void* reg) = regerror;
+extern expr* pure_regmatch(void* reg) = regmatch;
+extern expr* pure_regskip(void* reg) = regskip;
+namespace;
+
+/* .. function:: regex pat cflags s eflags
+
+      Compiles and matches a regex in one go, and returns the list of
+      submatches (if any).
+
+      :param string pat: the regular expression pattern
+      :param int cflags: the compilation flags (bitwise or of any of the flags
+      	     	 	 accepted by regcomp(3))
+      :param string s:   the subject string to be matched
+      :param int eflags: the matching execution flags (bitwise or of any of the
+      	     	 	 flags accepted by regexec(3))
+
+   Symbolic :const:`REG_*` constants are provided for the different flag
+   values, see the regcomp(3) manpage for an explanation of these. Two
+   particularly important compilation flags (to be included in the ``cflags``
+   argument) are :const:`REG_NOSUB`, which prevents submatches to be computed,
+   and :const:`REG_EXTENDED`, which switches :func:`regex` from "basic" to
+   "extended" regular expressions so that it understands all the regular
+   expression elements of egrep(1) in the pattern argument.
+
+   Depending on the flags and the outcome of the operation, the result of this
+   function can take one of the following forms:
+
+   - ``regerr code msg``: This indicates an error during compilation of the
+     pattern (e.g., if there was a syntax error in the pattern). ``code`` is
+     the nonzero integer code returned by ``regcomp``, and ``msg`` is the
+     corresponding error message string, as returned by ``regerror``. You can
+     redefine the :func:`regerr` function as appropriate for your application
+     (e.g., if you'd like to print an error message or throw an exception).
+
+   - ``0`` or ``1``: Just a truth value indicates whether the pattern matched
+     or not. This will be the form of the result if the :const:`REG_NOSUB`
+     flag was specified for compilation, indicating that no submatch
+     information is to be computed.
+
+   - ``0`` (indicating no match), or ``1`` (indicating a successful match),
+     where the latter value is followed by a tuple of ``(pos,substr)`` pairs
+     for each submatch. This will be the form of the result only if the
+     :const:`REG_NOSUB` flag was *not* specified for compilation, so that
+     submatch information is available.
+
+   Note that, according to POSIX semantics, a return value of 1 does *not*
+   generally mean that the entire subject string was matched, unless you
+   explicitly tie the pattern to the beginning (``^``) and end (``$``) of the
+   string.
+
+   If the result takes the latter form, each ``(pos,substr)`` pair indicates a
+   portion of the subject string which was matched; ``pos`` is the position at
+   which the match starts, and ``substr`` is the substring (starting at
+   position ``pos``) which was matched. The first ``(pos,substr)`` pair always
+   indicates which portion of the string was matched by the entire pattern,
+   the remaining pairs represent submatches for the parenthesized subpatterns
+   of the pattern, as described on the regcomp(3) manual page. Note that some
+   submatches may be empty (if they matched the empty string), in which case a
+   pair ``(pos,"")`` indicates the (nonnegative) position ``pos`` where the
+   subpattern matched the empty string. Other submatches may not participate
+   in the match at all, in which case the pair ``(-1,"")`` is returned. */
+
+regex pat::string cflags::int s::string eflags::int
+= if regstatus re then regerr (regstatus re) (regerror re)
+  else if regexec re s eflags then 0
+  else 1,regmatch re when re = sentry regfree (regcomp pat cflags) end;
+
+/* ..
+
+   The following helper functions are provided to analyze the result returned
+   by :func:`regex`.
+
+   .. function:: reg_result res
+
+      Returns the result of a :func:`regex` call, i.e., a :func:`regerr` term
+      if compilation failed, and a flag indicating whether the match was
+      successful otherwise. */
+
+reg_result (regerr code msg) = regerr code msg;
+reg_result b::int = b;
+reg_result (b::int,_) = b;
+
+/* .. function:: reg_info res
+
+      Returns the submatch info if any, otherwise it returns ``()``. */
+
+reg_info (_::int,info) = info;
+reg_info _ = () otherwise;
+
+/* .. function:: reg n info
+
+      Returns the ``n``\ th submatch of the given submatch info, where ``info``
+      is the result of a :func:`reg_info` call. */
+
+reg 0 (p,s,_) = p,s;
+reg 0 (p,s) = p,s;
+reg n::int (_,_,infos) = reg (n-1) infos if n>0;
+
+/* .. function:: regs info
+
+      Returns all valid submatches, i.e., the list of all triples ``(n,p,s)``
+      for which ``reg n == (p,s)`` with ``p>=0``. */
+
+regs info = myregs 0 info with
+  myregs n (p,s,infos)	= (n,p,s):myregs (n+1) infos if p>=0;
+			= myregs (n+1) infos otherwise;
+  myregs n (p,s)	= [(n,p,s)] if p>=0;
+			= [] otherwise;
+end;
+
+/* ..
+
+   In addition, the following convenience functions are provided to perform
+   global regex searches, to perform substitutions, and to tokenize a string
+   according to a given delimiter regex.
+
+   .. function:: regexg f pat cflags s eflags
+
+      Perform a global regular expression search. This routine will scan the
+      entire string for (non-overlapping) instances of the pattern, applies
+      the given function ``f`` to the ``reg_info`` for each match, and
+      collects all results in a list. Note: Never specify the
+      :const:`REG_NOSUB` flag with this function, it needs the submatch
+      info. */
+
+regexg f pat::string cflags::int s::string eflags::int
+= if regstatus re then regerr (regstatus re) (regerror re)
+  else iterwhile check next first
+with
+  first = if regexec re s eflags then () else f (regmatch re);
+  next _ = if regnext re 0 then () else f (regmatch re);
+  check _ = regstatus re == 0;
+end when re = sentry regfree (regcomp pat cflags) end
+if ~(cflags and REG_NOSUB);
+
+/* .. function:: regexgg f pat cflags s eflags
+
+      This works like :func:`regexg`, but allows overlapping matches. */
+
+regexgg f pat::string cflags::int s::string eflags::int
+= if regstatus re then regerr (regstatus re) (regerror re)
+  else iterwhile check next first
+with
+  first = if regexec re s eflags then () else f (regmatch re);
+  next _ = if regnext re 1 then () else f (regmatch re);
+  check _ = regstatus re == 0;
+end when re = sentry regfree (regcomp pat cflags) end
+if ~(cflags and REG_NOSUB);
+
+/* .. function:: regsub f pat cflags s eflags
+
+      Replaces all non-overlapping instances of a pattern with a computed
+      substitution string. To these ends, the given function ``f`` is applied
+      to the :func:`reg_info` for each match. The result string is then
+      obtained by concatenating ``f info`` for all matches, with the unmatched
+      portions of the string in between. To make this work, ``f`` must always
+      return a string value; otherwise, :func:`regsub` throws a
+      :cons:`bad_string_value` exception. */
+
+regsub f pat::string cflags::int s::string eflags::int
+= if regstatus re then regerr (regstatus re) (regerror re)
+  else strcat (iterwhile check next first) + regskip re
+with
+  first = if regexec re s eflags then () else regskip re+h (f (regmatch re));
+  next _ = if regnext re 0 then () else regskip re+h (f (regmatch re));
+  check _ = regstatus re == 0;
+  h x::string = x; h x = throw (bad_string_value x) otherwise;
+end when re = sentry regfree (regcomp pat cflags) end
+if ~(cflags and REG_NOSUB);
+
+/* .. function:: regsplit pat cflags s eflags
+
+      Splits a string into constituents delimited by substrings matching the
+      given pattern. */
+
+regsplit pat::string cflags::int s::string eflags::int
+= if regstatus re then regerr (regstatus re) (regerror re)
+  else if null s then []
+  else iterwhile check next first + [regskip re]
+with
+  first = if regexec re s eflags then () else regskip re;
+  next _ = if regnext re 0 then () else regskip re;
+  check _ = regstatus re == 0;
+end when re = sentry regfree (regcomp pat cflags) end
+if ~(cflags and REG_NOSUB);
+
+/* ..
+
+   Please note that these operations all operate in an eager fashion, i.e.,
+   they process the entire input string in one go. This may be unwieldy or at
+   least inefficient for huge amounts of text. As a remedy, the following lazy
+   alternatives are available:
+
+   .. function:: regexgs f pat cflags s eflags
+                 regexggs f pat cflags s eflags
+                 regsplits pat cflags s eflags
+
+      These work like :func:`regexg`, :func:`regexgg` and :func:`regsplit`
+      above, but return a stream result which enables you to process the
+      matches one by one, using "call by need" evaluation. */
+
+regexgs f pat::string cflags::int s::string eflags::int
+= if regstatus re then regerr (regstatus re) (regerror re)
+  else takewhile check (iterate next first)
+with
+  first = if regexec re s eflags then () else f (regmatch re);
+  next _ = if regnext re 0 then () else f (regmatch re);
+  check _ = regstatus re == 0;
+end when re = sentry regfree (regcomp pat cflags) end
+if ~(cflags and REG_NOSUB);
+
+regexggs f pat::string cflags::int s::string eflags::int
+= if regstatus re then regerr (regstatus re) (regerror re)
+  else takewhile check (iterate next first)
+with
+  first = if regexec re s eflags then () else f (regmatch re);
+  next _ = if regnext re 1 then () else f (regmatch re);
+  check _ = regstatus re == 0;
+end when re = sentry regfree (regcomp pat cflags) end
+if ~(cflags and REG_NOSUB);
+
+regsplits pat::string cflags::int s::string eflags::int
+= if regstatus re then regerr (regstatus re) (regerror re)
+  else if null s then []
+  else takewhile check (iterate next first) + [regskip re]&
+with
+  first = if regexec re s eflags then () else regskip re;
+  next _ = if regnext re 0 then () else regskip re;
+  check _ = regstatus re == 0;
+  /* We need fully lazy stream concatenation here. (The standard + operator
+     isn't lazy enough, because it's also used for arithmetic operations.) */
+  []+ys = ys; (x:xs)+ys = x:(xs+ys)&;
+end when re = sentry regfree (regcomp pat cflags) end
+if ~(cflags and REG_NOSUB);
+
+/* ..
+
+   Basic Examples
+   ~~~~~~~~~~~~~~
+
+   Let's have a look at some simple examples::
+
+     > let pat = "[[:alpha:]][[:alnum:]]*";
+     > let s = "1var foo 99 BAR $%&";
+
+   Simple match::
+
+     > regex pat 0 s 0;
+     1,1,"var"
+
+   Same without match info::
+
+     > regex pat REG_NOSUB s 0;
+     1
+
+   Global match, return the list of all matches::
+
+     > regexg id pat 0 s 0;
+     [(1,"var"),(5,"foo"),(12,"BAR")]
+
+   Same with overlapping matches::
+
+     > regexgg id pat 0 s 0;
+     [(1,"var"),(2,"ar"),(3,"r"),(5,"foo"),(6,"oo"),(7,"o"),(12,"BAR"),
+     (13,"AR"),(14,"R")]
+
+   Note that :func:`id` (the identity function) in the examples above can be
+   replaced with an arbitrary function which processes the matches. For
+   instance, if we only want the matched strings instead of the full match
+   info::
+
+     > regexg (!1) pat 0 s 0;
+     ["var","foo","BAR"]
+
+   Lazy versions of both :func:`regexg` and :func:`regexgg` are provided which
+   return the result as a stream instead. These can be processed in a "call by
+   need" fashion::
+
+     > regexgs id pat 0 s 0;
+     (1,"var"):#<thunk 0x7fb1b7976750>
+     > last ans;
+     12,"BAR"
+
+   Let's verify that the processing is really done lazily::
+
+     > test x = printf "got: %s\n" (str x) $$ x;
+     > let xs = regexgs test pat 0 s 0;
+     got: 1,"var"
+     > xs!1;
+     got: 5,"foo"
+     5,"foo"
+     > last xs;
+     got: 12,"BAR"
+     12,"BAR"
+
+   As you can see, the first match is produced immediately, while the
+   remaining matches are processed as the result stream is traversed. This is
+   most useful if you have to deal with bigger amounts of text. By processing
+   the result stream in a piecemeal fashion, you can avoid keeping the entire
+   result list in memory. For instance, compare the following::
+
+     > let s2 = fget $ fopen "system.pure" "r";
+     > stats -m
+     > #regexg id pat 0 s2 0;
+     7977
+     0.18s, 55847 cells
+     > #regexgs id pat 0 s2 0;
+     7977
+     0.12s, 20 cells
+
+   Regex Substitutions and Splitting
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+   We can also perform substitutions on matches::
+
+     > regsub (sprintf "<%d:%s>") pat 0 s 0;
+     "1<1:var> <5:foo> 99 <12:BAR> $%&"
+
+   Or split a string using a delimiter pattern (this uses an egrep pattern)::
+
+     > let delim = "[[:space:]]+";
+     > regsplit delim REG_EXTENDED s 0;
+     ["1var","foo","99","BAR","$%&"]
+     > regsplit delim REG_EXTENDED "The   quick brown    fox" 0;
+     ["The","quick","brown","fox"]
+
+   The :func:`regsplit` operation also has a lazy variation::
+
+     > regsplits "[[:space:]]+" REG_EXTENDED "The   quick brown    fox" 0;
+     "The":#<thunk 0x7fb1b79775b0>
+     > last ans;
+     "fox"
+
+   Empty Matches
+   ~~~~~~~~~~~~~
+
+   Empty matches are permitted, too, subject to the constraint that at most
+   one match is reported for each position (which also prevents looping). And
+   of course an empty match will only be reported if nothing else matches. For
+   instance::
+
+     > regexg id "" REG_EXTENDED "foo" 0;
+     [(0,""),(1,""),(2,""),(3,"")]
+     > regexg id "o*" REG_EXTENDED "foo" 0;
+     [(0,""),(1,"oo"),(3,"")]
+     > regexgg id "o*" REG_EXTENDED "foo" 0;
+     [(0,""),(1,"oo"),(2,"o"),(3,"")]
+
+   This also works when substituting or splitting::
+
+     > regsub (cst " ") "" REG_EXTENDED "some text" 0;
+     " s o m e   t e x t "
+     > regsub (cst " ") " ?" REG_EXTENDED "some text" 0;
+     " s o m e  t e x t "
+     > regsplit "" REG_EXTENDED "some text" 0;
+     ["","s","o","m","e"," ","t","e","x","t",""]
+     > regsplit " ?" REG_EXTENDED "some text" 0;
+     ["","s","o","m","e","","t","e","x","t",""]
+
+   Submatches
+   ~~~~~~~~~~
+
+   Parenthesized subexpressions in a pattern yield corresponding submatch
+   information, which is useful if we need to retrieve the text matched by a
+   given subexpression. For instance, suppose we want to parse environment
+   lines, such as those returned by the shell's ``set`` command. These can be
+   dissected using the following regex::
+
+     > const env_pat = "^([^=]+)=(.*)$";
+     > const env_flags = REG_EXTENDED or REG_NEWLINE;
+     > regex env_pat env_flags "SHELL=/bin/sh" 0;
+     1,0,"SHELL=/bin/sh",0,"SHELL",6,"/bin/sh"
+
+   Note that we again used an extended regex here, and we also added the
+   :const:`REG_NEWLINE` flag so that we properly deal with multiline input.
+   The desired information is in the 4th and 6th element of the submatch info,
+   we can retrieve that as follows::
+
+     > parse_env s = regexg (\info -> info!3 => info!5) env_pat env_flags s 0;
+     > parse_env "SHELL=/bin/sh\nHOME=/home/bar\n";
+     ["SHELL"=>"/bin/sh","HOME"=>"/home/bar"]
+
+   We can get hold of the real process environment as follows::
+
+     > let env = parse_env $ fget $ popen "set" "r";
+     > #env;
+     109
+     > head env;
+     "BASH"=>"/usr/bin/sh"
+
+   Just for the fun of it, let's convert this to a record, providing easy
+   random access to the environment variables::
+
+     > let env = record env;
+     > env!!["SHELL","HOME"];
+     {"/bin/bash","/home/ag"}
+
+*/

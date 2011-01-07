@@ -1,0 +1,83 @@
+
+// Some convenience functions.
+
+extern void __sndfile_defs(); __sndfile_defs;
+
+// Wrappers around sf_open, sf_open_fd and sf_close to provide for
+// auto-collecting SNDFILE* pointers.
+
+namespace __C with
+extern SNDFILE* sf_open(char*, int, SF_INFO*);
+extern SNDFILE* sf_open_fd(int, int, SF_INFO*, int);
+extern int sf_close(SNDFILE*);
+end;
+
+sf_open name::string mode::int info::pointer
+  = if null sf then sf else sentry __C::sf_close sf if pointerp sf
+    when sf = __C::sf_open name mode info end;
+
+sf_open_fd fd::int mode::int info::pointer close_desc::int
+  = if null sf then sf else sentry __C::sf_close sf if pointerp sf
+    when sf = __C::sf_open_fd fd mode info close_desc end;
+
+sf_close sf::pointer = __C::sf_close $ clear_sentry sf
+  if get_sentry sf === __C::sf_close;
+
+// Create an auto-collecting SF_INFO structure for use with sf_open.
+
+sf_info () = cooked sf_new_info;
+sf_info (samplerate::int, channels::int, format::int) =
+  cooked $ sf_make_info samplerate channels format;
+
+// Create an auto-collecting SF_FORMAT_INFO structure for use with sf_command.
+
+sf_format_info format::int = cooked $ sf_make_format_info format;
+
+// Get the info for the given format id.
+
+sf_get_format_info format::int = sf_get_format_info info if res==0 when
+  info = sf_format_info format;
+  res = sf_command NULL SFC_GET_FORMAT_INFO info SIZEOF_SF_FORMAT_INFO;
+end;
+
+// Enumerate all available simple formats.
+
+sf_simple_formats = map sf_get_simple_format $ 0..sf_get_simple_format_count-1
+with
+  sf_get_simple_format_count = count!0 if res==0 when
+    count = {0};
+    res = sf_command NULL SFC_GET_SIMPLE_FORMAT_COUNT count SIZEOF_INT;
+  end;
+  sf_get_simple_format k::int = sf_get_format_info info if res==0 when
+    info = sf_format_info k;
+    res = sf_command NULL SFC_GET_SIMPLE_FORMAT info SIZEOF_SF_FORMAT_INFO;
+  end;
+end;
+
+// Enumerate all available major formats.
+
+sf_major_formats = map sf_get_major_format $ 0..sf_get_major_format_count-1
+with
+  sf_get_major_format_count = count!0 if res==0 when
+    count = {0};
+    res = sf_command NULL SFC_GET_FORMAT_MAJOR_COUNT count SIZEOF_INT;
+  end;
+  sf_get_major_format k::int = sf_get_format_info info if res==0 when
+    info = sf_format_info k;
+    res = sf_command NULL SFC_GET_FORMAT_MAJOR info SIZEOF_SF_FORMAT_INFO;
+  end;
+end;
+
+// Enumerate all available subtypes.
+
+sf_subtypes = map sf_get_subtype $ 0..sf_get_subtype_count-1
+with
+  sf_get_subtype_count = count!0 if res==0 when
+    count = {0};
+    res = sf_command NULL SFC_GET_FORMAT_SUBTYPE_COUNT count SIZEOF_INT;
+  end;
+  sf_get_subtype k::int = sf_get_format_info info if res==0 when
+    info = sf_format_info k;
+    res = sf_command NULL SFC_GET_FORMAT_SUBTYPE info SIZEOF_SF_FORMAT_INFO;
+  end;
+end;
