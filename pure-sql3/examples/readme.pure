@@ -1,0 +1,135 @@
+/* readme.pure -- examples in README */
+
+/* NOTE - because of the intentional errors illustrated with dbp2 and
+   dbp2_sp, typing "clear" and "y" will cause an automatic call to
+   finalize when dbp2_sp goes out of scope. This throws an exception
+   that causes the Pure interpreter to abort. Please use "quit"
+   and restart the Pure interpreter rather than use "clear" to avoid
+   this behavior. */
+
+
+/* SIMPLE EXAMPLE */
+
+using sql3; using namespace sql3;
+
+let dbp = open "readme.db";
+
+exec dbp "create table if not exists RM (name text, age integer)";
+
+exec dbp "delete from RM";
+
+let sp1 = prep dbp "ci" "insert into RM values (?,?)";
+
+exec sp1 ("Sam",20);
+
+exec sp1 ("Fred",22);
+
+let sp2 = prep dbp "ci:i" "select * from RM where age > ?";
+
+
+/* DATABASE CONNECTIONS  */
+
+let dbp2 = open "readme.db"; dbp2; 
+
+catch error (open ("RM_zyx.db",SQLITE_OPEN_READONLY));
+
+let dbp2_sp = prep dbp2 "ci:" "select * from RM";
+
+exec dbp2_sp ();
+
+close dbp2;
+
+catch error (exec dbp2_sp);
+
+
+/* PREPARED STATEMENTS */
+
+let sp1 = prep dbp "ci" "insert into RM values (?,?)";
+
+let sp2 = prep dbp "ci:i" "select * from RM where age > ?";
+
+exec sp1 ("Tom",30);
+
+exec sp2 19;
+
+exec dbp "delete from RM where name='Tom'";
+
+catch error (exec sp2 "a");
+
+let sp3 = prep dbp "c:" "select name from RM";
+
+exec sp3 ();
+
+exec dbp "create table if not exists RM (name varchar, age integer)";
+
+lexec sp2 19;
+
+catch error (finalize dbp2_sp);
+
+
+/* Exceptions */
+
+db_error_handler (db_error ec msg) = ()
+when
+  source = if ec > 0 then "SQLite" else "Sql3";
+  printf "%s db_error: ec %d, %s\n" (source,ec,msg);
+end;
+
+db_error_handler x = throw x;
+
+catch db_error_handler (exec dbp "select * from NO_TABLE");
+
+
+/* CUSTOM SQL FUNCTIONS */
+
+exec dbp "delete from RM where name='Tom'";
+
+create_function dbp "p_fn" 2 plus with plus x y = x + y; end;
+
+let sp4 = prep dbp "cii:" 
+         "select p_fn('Hi ',name), age, p_fn(age,10) from RM";
+
+exec sp4 ();
+
+create_function dbp "p_qm" (-1) quasimodo with
+  quasimodo xs = "quasimodo: "+join ":" [str x | x=xs];
+end;
+
+create_function dbp "p_count" 0 counter with
+  counter () = put r (get r+1);
+end when r = ref 0 end;
+
+let sp5 = prep dbp "ic:" "select p_count(), p_qm(name,age) from RM";
+
+//exec sp5 ();
+
+create_function dbp "p_avg" 1 (step,final,(0,0.0)) with
+  step (n,a) x = n+1, a+x;
+  final (n,a) = a/n;
+end;
+
+let sp6 = prep dbp "id:" "select count(name), p_avg(age) from RM";
+
+exec sp6 ();
+
+
+/* ACCESSING THE REST OF THE SQLITE3 C INTERFACE */
+
+extern int sqlite3_busy_timeout(sqlite3*, int);
+
+sqlite3_busy_timeout dbp 10;
+
+extern int sqlite3_changes(sqlite3*);
+
+exec sp1 ("Harvey",12);
+
+sqlite3_changes dbp;
+
+extern char *sqlite3_column_name(sqlite3_stmt*, int);
+ 
+exec sp2 29;
+
+sqlite3_column_name sp2 1;
+
+exec dbp "delete from RM where name='Harvey'";
+

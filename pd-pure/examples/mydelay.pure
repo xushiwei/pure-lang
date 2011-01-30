@@ -1,0 +1,35 @@
+
+/* pd-pure provides a simple asynchronous messaging facility which allows a
+   Pure object to schedule messages to be delivered to itself later. This
+   example shows how to use these to implement a simple kind of delay object
+   which just delays an incoming message by a given amount of time in
+   milliseconds specified as a creation argument.
+
+   Note that pd-pure only allows you to schedule a single asynchronous event
+   per call of the object function. Thus, if the 'mydelay' object receives
+   another message while it is still waiting for the previous one to be
+   delivered, the old timer is cancelled and the new one is scheduled instead;
+   this works like the builtin 'delay' object. Also, scheduling a new event at
+   an infinite (or nan) time value just cancels an existing timer; we use this
+   to implement the 'stop' message below. */
+
+using system;
+
+/* pd-pure also provides the parameterless pd_time function which yields the
+   current logical Pd time in milliseconds. We use this routine here to print
+   on stdout the times at which a message is scheduled and delivered. */
+
+extern double pd_time();
+
+mydelay _ (alarm msg) = msg when
+  printf "[%g] received  '%s'\n" (pd_time,str msg);
+end;
+
+nonfix stop;
+mydelay _ stop = pd_delay inf () when
+  printf "[%g] cancelled\n" pd_time;
+end;
+
+mydelay t msg = pd_delay t (alarm msg) when
+  printf "[%g] scheduled '%s'\n" (pd_time,str msg);
+end;

@@ -1,0 +1,1187 @@
+
+** Pure 0.47 (in progress)
+
+* Build System
+
+pkg-config support was added to the sources, which simplifies compiling Pure
+modules and linking them against the Pure runtime library (see
+examples/hellomod for an example).
+
+* Language
+
+Limited support for extern declarations of varargs functions was added. This
+makes it possible to call functions like printf directly from Pure. Please
+check the manual for details.
+
+Inline code sections are now denoted '%<...%>' instead of the previous
+'%{...%}' syntax. This makes it possible to properly support them in Pure mode
+(see below), and also avoids syntactic ambiguities (note that '%{' is legal
+Pure syntax; it could denote a % operator followed by a matrix value).
+
+* Pure Mode
+
+Emacs Pure mode went through a comprehensive overhaul, offering a bunch of
+bugfixes, improvements and new features, see the ChangeLog for details. The
+most important user-visible changes are listed below:
+
+- At long last, Pure mode now offers indentation of Pure code (TAB) and
+  filling of comment paragraphs (M-q). Also, "electric" characters (';', '=',
+  parentheses etc.) have been added which do automatic indentation and
+  alignment of right-hand sides of equations.
+
+- As suggested by Jason E. Aten, Pure mode now provides commands for feeding
+  Pure code into a running interpreter instance.
+
+- Some new cursor movements commands (pure-prev/next/backward/forward-defun)
+  are available for traversing the block hierarchy of a Pure program. There's
+  also a new pure-mark-defun command to mark Pure definitions.
+
+- There's a new convenience command pure-scratchpad to create a *pure-scratch*
+  buffer and put it in Pure mode, and a pure-quit command to quit the Pure
+  interpreter and kill its buffer.
+
+- Debugging mode is now controlled with the pure-debug-mode flag, a toggle for
+  this can be found in the Pure menu. Also, a new customization variable,
+  pure-stacksize, allows you to set the value of the PURE_STACK environment
+  variable in Emacs.
+
+- The pure-help command now properly looks up symbols in the global help
+  index, and completion of Pure symbols was added to Pure mode and a number of
+  commands which, like pure-help, take a symbol as input in the minibuffer.
+
+Also, Pure mode gets byte-compiled and installed now by default, if Emacs can
+be detected at configure time.
+
+** Pure 0.46 2010-12-05
+
+The biggest change in this release is that the Pure documentation is now
+formatted using Sphinx (http://sphinx.pocoo.org/). This implies some changes
+in the way the docs are organized, generated and accessed. The benefits are:
+
+- More complete and prettier docs in a variety of formats (including html,
+  htmlhelp, pdf and epub). You can take a look at the docs here:
+  http://docs.pure-lang.googlecode.com/hg/index.html
+
+- Global index and cross-referencing between different manuals. This
+  encompasses all available manuals, including the addon documentation.
+  Searching the global index is also supported by the interpreter's 'help'
+  command.
+
+- Specific RST markup for Pure-related items such as functions, macros, etc.,
+  syntax highlighting of Pure code (using Pygments), inline latex math and all
+  the other goodies that Sphinx offers.
+
+To make this possible, the documentation is now in a separate package which
+must be installed in addition to the interpreter. (If you have a working
+internet connection and the wget program, just run 'sudo make install-docs'
+while installing the interpreter. Sphinx is not required to do this. Please
+see the INSTALL file for details.)
+
+Other than that, there are two new configure options to make it possible to
+force static linking against LLVM, and to use MPIR instead of GMP for the
+bigint arithmetic. Please check the ChangeLog for details.
+
+Also note that the Pure source code is maintained in a Mercurial repository
+now. You can check out the latest development sources with:
+
+  hg clone https://pure-lang.googlecode.com/hg pure-lang
+
+** Pure 0.45 2010-10-31
+
+This release is mostly concerned with the C interface in general and the
+bitcode interface in particular, featuring many improvements and bugfixes in
+this area. The most important user-visible changes are listed below.
+
+* Improvements and bugfixes in the bitcode interface. In particular, bitcode
+  modules can now be imported into different namespaces and can be made
+  'public' or 'private' on a per-namespace basis. Also, there's now more
+  leeway in redeclaring external functions in different ways, which gives a
+  way to work around the char* versus void* issue in the bitcode interface.
+  Last but not least, Faust bitcode modules can now be reloaded on the fly,
+  dsp pointers are now fully type-checked, and some new convenience functions
+  as well as a little bit of runtime type information for Faust modules has
+  been added.
+
+* Inlining of C, C++, Fortran and Faust code in Pure scripts. The interpreter
+  now compiles these to bitcode and loads the bitcode modules on the fly,
+  provided that you have the necessary compilers installed (llvm-gcc for
+  C/C++/Fortran, clang for C/C++, faust2 for Faust). See the new "Inline Code"
+  section in the manual for details.
+
+* New int** and double** conversions for matrices which generate a vector of
+  row pointers on the fly. (This was already used in the Faust interface
+  previously, but is now available for all applications.) For consistency, the
+  related int* and double* conversions now also treat the matrices as
+  reference arguments, so that they can be modified in-place. Moreover, the
+  missing byte and long long vector conversions (int matrix to char* or
+  char**, as well as to int64* or int64**) were added, and there's now also
+  support for argv-style vector arguments (char**, void**). This is all
+  described in detail in the "C Interface" section of the manual which was
+  completely rewritten.
+
+* Full checking of pointer types in the C interface. To these ends, pointer
+  values can now be tagged with type information at runtime, and the compiler
+  keeps track of all C pointer types used in extern declarations. void* can
+  still be used to pass any kind of pointer, but otherwise the pointer types
+  will have to match when calling an external function (or you'll have to use
+  a type cast; operations for that as well as runtime type information are
+  provided in the prelude).
+
+  There's no doubt that this change will raise lots of backward compatibility
+  issues. But with all the C library modules out there, checking pointers for
+  C type compatibility was becoming a real issue, and the workarounds were
+  ugly. A real solution was needed, so better we do this now than after 1.0 is
+  out and a lot more library modules have been written.
+
+* Sentries can now be placed on any kind of Pure expression. This is
+  especially convenient with atomic non-pointer data such as file descriptors
+  since these can be finalized now. (Alas, this also needs 4 bytes more per
+  expression node on 32 bit systems. Storage size on 64 bit systems is still
+  the same, though.)
+
+Besides these changes, the interpreter also sports the following new features:
+
+* The new --eager pragma instructs the interpreter to compile a given function
+  eagerly. This is particularly useful to avoid hiccups in realtime functions.
+
+* The interpreter can now do a "cold" restart (reloading all scripts) using
+  'run' without a script argument. You can also employ this to quickly rerun
+  the interpreter with debugging enabled using 'run -g'.
+
+** Pure 0.44 2010-10-01
+
+This release sports a bunch of bugfixes and OSX and FreeBSD compatibility
+fixes. The build system was also improved, and the sources are now compatible
+with the forthcoming LLVM 2.8 release. As usual, please check the ChangeLog
+and the manual for details. The most important user-visible changes are listed
+below.
+
+- Experimental support for importing LLVM bitcode files ('using "bc:..."').
+  This also includes special support for importing Faust bitcode modules
+  ('using "dsp:..."'). See the manual section "LLVM Bitcode Interface" for
+  details. Some examples can be found in examples/bitcode.
+
+- Constants holding runtime data such as pointers are now properly handled by
+  the batch compiler.
+
+- New --const, --noconst code generation options. These allow you to tell the
+  batch compiler whether constants should be computed at compile time or at
+  run time.
+
+- New --required pragma. This allows you to tell the batch compiler about
+  functions which should always be linked into the output code.
+
+- Cosmetic changes in the expression printer. Combinations of non-associative
+  operators on the same precedence level are now properly parenthesized. So,
+  e.g., '(x=>y)=>z' unparses as is now, rather than '(=>) (x=>y) z'.
+
+- Fixed up treatment of floating point constants in the lexer so that typos
+  are now treated in a manner consistent with integer constants.
+
+- New 'trace' debugging command. This enables you to trace reductions by
+  certain functions without actually interrupting the evaluation.
+
+- Allow printed expression results to be piped through the program named with
+  the PURE_LESS environment variable (similar to what 'show' does with
+  PURE_MORE).
+
+- As discussed on the mailing list, -w now also warns about implicit
+  declarations of symbols in the default namespace.
+
+Standard library:
+
+- New time-related functions, 'key' and 'val', vector functions.
+
+- Overhaul of the precedence table so that $$ and $ are now on different
+  precedence levels.
+
+- Prevent segfaults due to 'fclose' et al being run twice on the same file
+  pointer.
+
+- 'tuple', 'string' and 'matrix' now act as the identity if the argument is
+  already of the corresponding type.
+
+Thanks to Michael Ashton, asitdepends, John Cowan, Masahiro Miura, Eddie
+Rucker and Peter Summerland for their bug reports and suggestions. Also,
+special thanks are due to Roman Neuhauser for his work on improving the build
+system, to Stephane Letz for the joint work on the Pure-Faust bitcode
+interface, and to Yann Orlarey for his hospitality and fruitful discussions
+while visiting Grame.
+
+** Pure 0.43 2010-03-17
+
+More polishing, bugfixes and general improvements on the road to Pure 1.0.
+
+- Integer literals can now be specified in base 2 (0b or 0B prefix), as
+  suggested by Geert Janssen.
+
+- The debugger now provides a basic post mortem debugging facility. To make
+  this work, you have to invoke the interpreter in debugging mode (-g). The
+  new 'bt' command then prints a backtrace of the call sequence after an
+  evaluation died with an unhandled exception. As with 'show', the output of
+  'bt' can be piped through PURE_MORE or captured in a string with 'evalcmd'.
+
+- The interpreter can now be run with the --ctags or --etags option to create
+  a tags file. This file can be used with vi, emacs and other editors which
+  support this feature, in order to quickly locate global symbol declarations
+  and definitions in Pure scripts. Emacs Pure mode now also supports this
+  with a new 'Make Tags' command in the Pure menu.
+
+- The 'using' clause now features a new 'sys:' tag (e.g., 'using "sys:math";')
+  to bypass the search of the current script directory, which works analogous
+  to the C preprocessor's '#include <...>' construct.
+
+- Better programming-in-the-large support. There's a new "scoped" namespace
+  construct ('namespace xyz with ... end') and the rules for creating new
+  symbols in namespaces have been revised. Basically, new global symbols are
+  now always created in the current rather than the default namespace, which
+  is what most people expect. (You can use the new -w option to check existing
+  scripts for backward compatibility issues, where symbols are placed into a
+  different namespace following the new namespace rules.) Also, there's now a
+  restricted form of the 'using namespace' clause which gives full control
+  over which symbols from a namespace should be visible as unqualified
+  symbols. Please see the section on namespaces in the manual for details.
+
+- Complete overhaul of the dictionary and set data types. We now also support
+  multidicts as well as hashed sets and bags. Moreover, set-like operations
+  (union, difference, intersection and subdict comparisons) are now available
+  for dictionaries, and different kinds of dictionaries or sets/bags can now
+  be mixed in infix operations (+, -, *, <, <= etc.). See the "Dictionaries"
+  and "Sets and Bags" sections in the Pure library manual for details.
+
+- An example showing how to interface to GNU Fortran has been added. See
+  fortran.{pure,f90} in the examples directory.
+
+- LLVM 2.7 compatibility fixes. Thanks to Jeffrey Yasskin, the TCO-related JIT
+  breakage on 64 bit systems present in recent LLVM svn revisions seems to be
+  fixed now, so that we expect Pure >= 0.43 to work with the forthcoming LLVM
+  2.7 release.
+
+Many thanks to all who reported bugs and participated in the mailing list
+discussions leading up to this release!
+
+** Pure 0.42 2010-01-29
+
+This release adds some facilities to inspect memory usage in the interpreter,
+and fixes some performance bugs in the library.
+
+* The new 'mem' command prints current memory usage (in terms of expression
+  cells) in the interpreter, and the 'stats' command has a new '-m' option
+  which enables printing the expression memory used in evaluations. Example:
+
+  > mem
+  413 cells (0 free)
+  > stats -m
+  > let xs = scanl (+) 1 (1..100);
+  0s, 306 cells
+  > mem
+  716 cells (306 free)
+
+* Some performance issues with 'split' and the regex operations (reported by
+  Jiri Spitz) were fixed. Also, the regexg, regexgg and regsplit operation now
+  have lazy alternatives which return a stream instead of an eager list, which
+  makes processing of big strings more efficient. Examples can be found in the
+  library manual.
+
+** Pure 0.41 2010-01-21
+
+This release fixes some of the remaining warts of the language and the
+implementation, specifically:
+
+* Indirect tail calls are now fully optimized, so that any remaining
+  limitations concerning the use of tail recursion in indirect function calls
+  and mutually recursive globals have been removed. (This required some slight
+  adjustments in the runtime ABI, so the runtime library version was bumped as
+  well.)
+
+* Due to popular demand, the semantics of the short-circuit logical operators
+  (&& and ||) were changed so that these builtins are both extensible and
+  tail-recursive now. The new implementation behaves as if && and || were
+  defined by the following equations (except that the second operand y is only
+  evaluated if necessary):
+
+	x::int && y = if x then x else y;
+	x::int || y = if x then y else x;
+
+* A new syntax for declaring infix/prefix/postfix operators with a precedence
+  given by an existing operator has been added. So you can write declarations
+  like the following,
+
+	infixl (+) ++;
+
+  which declares a new infixl operator ++ at the same precedence level as +.
+
+* The runtime and the prelude now offer some special support for symbolic
+  vectors of the form {key=>value,...}, which provide a convenient
+  representation for record-like data structures.
+
+* Users of the batch compiler (pure -c) should note that stripping of unused
+  functions (-s) is now the default in batch compilation. To get a full,
+  unstripped executable, you have to use the -u option. (The -s option is
+  still supported for backward compatibility, but doesn't have any effect,
+  except that it overrides a previous -u option.)
+
+Detailed information about these changes can be found in the Pure manual.
+
+Also, some bugs were squashed, a few more functions were added to the library,
+and the Mersenne Twister ('random' function) was updated to the 2002 version
+which fixes some issues with certain kinds of seed values.
+
+Last but not least, Hoigaard/autotelicum contributed syntax highlighting for
+BBEdit and TextWrangler (OSX editors), this is now included in the etc
+subdirectory (please see pure.plist).
+
+As usual, all the gory details can be found in the ChangeLog.
+
+** Pure 0.40 2009-12-23
+
+This release implements proper multi-argument lambdas and support for
+non-linear rules such as 'a*b+a*c = a*(b+c)', as discussed on the mailing
+list. Please see the ChangeLog and the documentation for details.
+
+Also, a few more examples have been added. (Special thanks to Peter
+Bernschneider for his Sudoku solver example.)
+
+** Pure 0.39 2009-12-06
+
+Besides some bugfixes, this release features a new code generation option to
+perform constant folding in the compiler frontend, and a pragma syntax to
+specify code generation options in the source on a per-rule basis. Please see
+the ChangeLog for details.
+
+** Pure 0.38 2009-12-01
+
+This release sports some bugfixes (see the ChangeLog for details), as well as
+improvements in the handling of const aggregates and signal exceptions. Here
+is a list of the most important user-visible changes:
+
+- Only constant scalars are still inlined, constant aggregates are now cached
+  in a read-only global variable instead. As discussed on the mailing list,
+  this makes the efficient handling of big constant values much easier for the
+  programmer.
+
+- Some extra checks were added to the prolog of Pure functions, so that stack
+  overflows and pending signals are now caught reliably. This is enabled by
+  default, but as it incurs a (typically small) runtime cost, generation of
+  the extra checks can be controlled with the PURE_NOCHECKS environment
+  variable as well as the new --nochecks and --checks command line options of
+  the interpreter.
+
+- The PURE_NOTC environment variable and the --notc/--tc command line switches
+  can now be used to control the use of tail call optimization at runtime.
+
+** Pure 0.37 2009-11-21
+
+Pure goes LGPL (GNU Lesser General Public license), in order to enable
+commercial Pure programs and extensions. More precisely:
+
+* The Pure runtime and standard library are now under the LGPLv3+.
+
+* pure.cc remains under the GPLv3+ (readline dependency). However, an
+  alternate, readline-free version (pure_norl.cc) is now available under a
+  BSD-style license.
+
+* The examples are now under a BSD-style license as well.
+
+Please see the README (or 'help copying') for details.
+
+Other user-visible changes (please see the ChangeLog for details):
+
+* Support for BSD editline/libedit as a drop-in replacement for GNU readline.
+  Also, you can now optionally disable readline and/or editline support at
+  configure time (--without-readline, --without-editline). Neither is required
+  to build Pure any more.
+
+* Removed all dependencies on the GSL library. Numeric Pure matrices now work
+  without GSL.
+
+* XML entity escapes in strings were updated to the latest W3C entity
+  definitions (2009-11-19).
+
+* The prelude defines a new 'sort' function which can be used to sort lists
+  and matrices using a given order predicate.
+
+* Bugfixes in the operator precedence parser.
+
+Moreover, Michel Salim has kindly provided Pure RPM packages for all recent
+Fedora releases. Thanks Michel! You can find these packages here:
+http://koji.fedoraproject.org/koji/packageinfo?packageID=9272
+
+** Pure 0.36 2009-10-06
+
+This is mainly a bugfix release, see the ChangeLog for details. Also, there
+are some improvements in the runtime library, and the 'val' operation can be
+used to parse simple expressions now, as suggested by Vili Aapro.
+
+Please note that the changes in the runtime required a bump of the runtime
+library version, so you'll have to recompile your addon modules as well.
+
+** Pure 0.35 2009-09-14
+
+This release sports various PowerPC compatibility fixes, please see the
+ChangeLog and the SYSTEM NOTES section in the INSTALL file for details.
+
+Moreover, support for online help was added to Emacs Pure mode (C-c C-h in
+Pure and Pure-Eval mode, also available in the Pure menu). To get the most out
+of this, make sure that you have emacs-w3m (http://emacs-w3m.namazu.org/)
+installed.
+
+** Pure 0.34 2009-09-03
+
+This release sports some additional fixes for various compilation quirks
+reported by Roman Neuhauser, as well as some changes and improvements as noted
+below.
+
+- The pure_interp_compile() routine in the runtime library was beefed up to
+  better support realtime modules such as pd-pure. (This required a bump of
+  the runtime library version, so you'll have to recompile addon modules once
+  again, sorry for the hassle.)
+
+- The batch compiler was overhauled to add LLVM bitcode support and remove the
+  dependency on llvmc and llvm-gcc (standard gcc is used to handle assembly
+  and linkage now). Please see the ChangeLog for details.
+
+- At long last, the 'nullary' keyword, which has been deprecated since Pure
+  0.26, was removed, so it isn't a special keyword any more. If you haven't
+  updated your Pure sources yet, you'll have to do so now.
+
+** Pure 0.33 2009-08-28
+
+Another bugfix release. This one fixes some more incompatibilities with latest
+LLVM revisions and some failed LLVM assertions hit by the overhauled version
+of the batch compiler if LLVM was compiled with --enable-assertions. Moreover,
+the linkage options were massaged a bit, reportedly they work better with
+FreeBSD and FC12 now.
+
+Emacs Pure mode now provides sensible defaults for the location of the Pure
+interpreter executable and the library directory if PATH and/or the PURELIB
+environment variable are set accordingly. This makes it easier to install Pure
+mode on Windows, as you don't have to edit the file any more if you want to
+use it with the Pure MSI package.
+
+Thanks are due to Roman Neuhauser for helping to sort out the issues
+preventing Pure to work on FreeBSD.
+
+** Pure 0.32 2009-08-27
+
+This release fixes the performance issues with the batch compiler on the
+latest LLVM versions in svn, and the source was updated once more to make it
+compile with the latest LLVM revision. Also, 'pure --version' now prints the
+LLVM version the interpreter was compiled with. The test system was revised so
+that 'make check' returns a proper error code now. Emacs Pure mode was
+overhauled as well. The new mode is derived from fundamental mode and the
+broken auto-indentation stuff was removed.
+
+** Pure 0.31 2009-08-24
+
+This release brings support for LLVM 2.6+ and some further improvements in the
+parser and the batch compiler, please see the ChangeLog for details.
+
+** Pure 0.30 2009-08-22
+
+This release sports a new -s option for the batch compiler which strips unused
+functions from the generated code. This considerably reduces both compilation
+times and code size (especially if the program imports huge libraries such as
+pure-gtk). However, note that the batch compiler only does a static analysis
+of which functions can be reached from the initialization code, so you have to
+be careful if your program uses 'eval', 'evalcmd' or 'val'.
+
+** Pure 0.29 2009-08-20
+
+Another bugfix release. This one fixes some Windows-related issues (see the
+ChangeLog for details) and a bug in the 'clear ans' command which prevented
+the 'ans' value from being garbage-collected. Moreover, sentries can now
+be placed also on symbols and function objects.
+
+** Pure 0.28 2009-08-16
+
+This release fixes an annoying bug in the new operator precedence parser.
+Also, namespace settings now stick when running a script interactively or
+sourcing the interactive initialization files, as suggested by Max Wolf.
+
+In addition, various useful process and I/O-related functions were added to
+the system module and the following new primitives are now available in the
+prelude (see the library manual for details):
+
+- The 'reduce' macro enables you to implement local rewriting rules. See
+  examples/rules.pure for an example.
+
+- The 'blob' and 'val' functions provide for safe expression serialization.
+  See examples/fork.pure for an example.
+
+** Pure 0.27 2009-08-09
+
+This is a bugfix release which cleans up some of the mess in qualid/type tag
+resolution left behind by the changes in the namespace system and the addition
+of user-defined type tags in the 0.26 release. In particular, it fixes a
+critical bug in the lexer which caused any global qualid of the form ::foo to
+be mistaken for a type tag. Also, it is now also possible to specify a qualid
+as a type tag.
+
+** Pure 0.26 2009-08-07
+
+This started out as a mere bugfix release, but then it became much more. A
+bunch of bugs were fixed, some implementation restrictions were removed, and
+some interesting new features were implemented. (This also required some
+changes in the internal runtime API, so existing modules have to be
+recompiled.)
+
+You can find the most important fixes and improvements in this release
+below. As usual, please see the ChangeLog for details.
+
+- As suggested by John Cowan, the 'nullary' keyword has been replaced with
+  'nonfix', which is more in line with the other fixity keywords. Existing
+  Pure scripts should be edited accordingly. For the time being, 'nullary'
+  still works as a synonym for 'nonfix', but the compiler warns that it is
+  deprecated.
+
+- The expression parser went through a major overhaul so that it essentially
+  supports an unlimited number of precedence levels now. (The implementation
+  still imposes a limit, but it's very large.) The standard operator system
+  has been overhauled as well, so that it becomes much easier to sneak in
+  additional levels. There are now 20 standard precedence levels which are
+  numbered from 1000 to 2900, see prelude.pure for details. The relative
+  priorities aren't changed, so most existing scripts should be unaffected,
+  but of course you may have to adjust the precedences of your own operator
+  declarations accordingly.
+
+- The code generated for numeric and string list/tuple/matrix constants has
+  been improved a lot. This speeds up compilation and enables the interpreter
+  to handle much bigger constant aggregates of these types than before.
+
+- Values used in constant definitions and 'eval' calls may now contain
+  arbitrary run time data. Thus you can now write stuff like 'const x = malloc
+  10;' or 'const y = \x->x*x;'. (This only works in interpreted scripts, the
+  batch compiler still forbids run time data in constants.)
+
+- Tail call elimination now works in batch-compiled scripts.
+
+In addition, the following new features have been implemented (please see the
+manual for details):
+
+- Added support for Miranda/Haskell-style operator sections. Thus you can now
+  write '(x+)' for '(+) x' and '(+x)' for 'flip (+) x', respectively.
+
+- Added support for 'outfix' operators which let you declare unary operators
+  in the form of pairs of custom bracket symbols, such as: 'outfix BEGIN END;'.
+  These have been adopted from Wm Leler's Bertrand language.
+
+- Added support for hierarchical namespaces (suggested by Max Wolf). Also,
+  qualified module names are now permitted in 'using' clauses and will be
+  translated to corresponding pathnames, as suggested by Eddie Rucker.
+
+- Added the notation 'x::bar', where 'bar' must be a known function identifier
+  or nonfix symbol, as a shorthand for the "as" pattern 'x@(bar _)'. This is
+  convenient with special data types (like the dictionaries and sets in the
+  standard library) which are represented using their own unary data
+  constructors.
+
+- Added readdir function to the system module (constributed by Jiri Spitz).
+
+Many thanks to all who reported bugs and suggested improvements!
+
+** Pure 0.25 2009-06-19
+
+The biggest change in this release is that in the C interface, 'long' now
+denotes a real C long int (whose size usually depends on the architecture),
+instead of always assuming 64 bit integers. This makes it easier to interface
+to C functions involving such values. Real 64 bit integers are now denoted
+'int64', and 'int8/int16/int32' are provided as synonyms for the
+'char/short/int' types. Affected bits and pieces in the standard library were
+fixed to accommodate these changes, see the ChangeLog for details.
+
+Unfortunately, this also required changes which break backward compatibility
+in the runtime library, so existing addon modules must be recompiled as
+well. Moreover, the following addons have been updated, so you should make
+sure that you run the latest releases of these (required versions are
+indicated): pure-ffi (0.6), pure-gen (0.6), pure-gl (0.6), pure-gtk (0.3),
+pure-odbc (0.3).
+
+In addition, there is a new 'ans' function to retrieve the most recent result
+printed on the interactive command line. Some minor bugs that crept into the
+0.23/0.24 releases were fixed as well. Please see the ChangeLog for details.
+
+** Pure 0.24 2009-05-30
+
+This is a maintenance release featuring some additions and cosmetic changes in
+the runtime API (as requested by John Cowan), and an overhaul of arithmetic
+sequences of double values (these now round the upper bound to the nearest
+grid point, in order to prevent rounding artifacts, as reported by Eddie
+Rucker).
+
+** Pure 0.23 2009-05-27
+
+This release features various bugfixes and optimizations in interpreter and
+library, see the ChangeLog for details. Also, support for quoted expressions
+was improved in various ways. In particular, please note the following
+user-visible changes:
+
+- Matrix transposition is now a function, transpose x. (The single quote is
+  now used for quoting expressions, see below.)
+
+- 'x is provided as a synonym for quote x. Moreover, macro and constant
+  substitution is now inhibited in quoted subterms. (OTOH, special constructs
+  and local variables inside quoted expressions are still evaluated as usual.
+  Please see the new subsection "The Quote" of the "Caveats and Notes" section
+  in the manual for details.)
+
+- For a symbolic matrix x, 'x now inhibits the implicit splicing of nested
+  submatrices. Symbolic matrices with nested submatrices are now printed in
+  quoted form, so that they can be reconstructed from their textual
+  representation.
+
+- Two new (and much improved) alternative implementations of Lisp-like
+  quasiquote are available. These are now provided as separate library
+  modules. Please note that these are still considered experimental right now.
+
+Also, as suggested by John Cowan, the BROWSER environment variable is now used
+by the interpreter to determine the help browser if PURE_HELP is not set. See
+http://www.catb.org/~esr/BROWSER/.
+
+Finally note that the runtime library number was bumped to 1.0, so addon
+modules need to be recompiled for the new version.
+
+** Pure 0.22 2009-04-03
+
+The interpreter now provides a simple symbolic debugger in interactive mode.
+To enable this, it must be invoked with the new -g option. (Please note that
+this will make your scripts run *much* slower and thus should be used only to
+run the debugger.) Please see section "Debugging" in the Pure Manual for
+details.
+
+** Pure 0.21 2009-03-29
+
+This release sports some changes in the build system to make things easier for
+package maintainers, and the addition of a batch compiler which allows you to
+compile Pure scripts to native executables. See below for details.
+
+Build System
+------------
+
+In preparation for the 1.0 release, the Pure runtime library now uses a proper
+major.minor versioning scheme, which is independent from the interpreter
+version.
+
+Moreover, "versioned" installs (i.e., parallel installations of different Pure
+versions) are now disabled by default. We decided to do this because versioned
+installs presented a real headache to package maintainers. You can still do a
+versioned install by running configure with the --enable-versioned option. It
+is also possible to have versioned and unversioned installations coexist if
+they live under different install prefixes, please see the INSTALL file for
+details.
+
+*IMPORTANT:* Because of the different installation layout, you should
+uninstall any earlier Pure version before installing this release.
+
+Also, if you're compiling from svn sources, please make sure that you rerun
+configure before building the new version. You should do that anyway when
+installing a new version, but it's really essential this time. :)
+
+Batch Compiler
+--------------
+
+The interpreter now offers an experimental batch compilation option -c to
+translate scripts to native executables or object files. For instance,
+
+	pure -c foo.pure -o foo
+
+creates the executable 'foo' from the script 'foo.pure', after executing the
+script as usual. This requires the *full* LLVM toolchain (including llvmc,
+llvm-gcc, etc.) to work, see the INSTALL file which now also has instructions
+on how to build llvm-gcc.
+
+You can also use a command like 'pure -c foo.pure -o foo.o' to create a native
+object file which can then be linked into other C/C++ programs or libraries.
+
+For utmost flexibility, 'pure -c foo.pure -o foo.ll' allows you to create an
+LLVM assembler (.ll) file. This can then be handed over to the LLVM tools,
+e.g., to apply special kinds of program transformations and optimizations,
+before finally compiling and linking the native executable or library.
+
+Note that even when batch-compiling, the compiled program is executed as
+usual. This is necessary because some parts of a Pure program (in particular,
+'eval' as well as 'const' definitions) may be used to modify the program at
+compile time, possibly depending on previous evaluations of other expressions.
+There's a new system variable 'compiling' which gives the program an
+indication whether it is running under the auspices of the batch compiler, so
+that it can adjust accordingly. This also enables you to play with advanced
+program optimization techniques such as partial evaluation
+(http://en.wikipedia.org/wiki/Partial_evaluation).
+
+Also note that the compiled executable is essentially a static snapshot of
+your program at the end of the compile time execution, which is then executed
+on the "bare metal", without a hosting interpreter. Only a minimal runtime
+system is provided. This considerably reduces startup times and makes it
+possible to deploy the executable (along with the runtime library) on systems
+without a Pure installation, but also implies some limitations, mostly
+concerning the use of the built-in 'eval' function.
+
+Please see the manual for details. In particular, have a look at
+pure.html#compiling-scripts and pure.html#batch-compilation to get started
+with this useful new feature.
+
+** Pure 0.20 2009-03-19
+
+This is a bugfix release. Most notably, two unrelated bugs in pattern matching
+code were fixed, please see the ChangeLog for details.
+
+** Pure 0.19 2009-03-14
+
+This release brings a completely revamped online documentation system ('help'
+command), which now uses documentation in html format (generated with
+docutils, see http://docutils.sf.net/) and an external web browser (w3m by
+default, http://w3m.sf.net/) to read the documentation. The Pure manual has
+been converted, and fairly extensive library documentation is now also
+available. (This was generated from the library sources, using the new
+pure-doc utility which is now available as a separate package.)
+
+The other major advance is the integration of Scott E. Dillard's optimized
+list-style matrix operations (map, foldl et al), which have been living on a
+separate branch for a while already, and have now been merged back into the
+trunk. These are *much* faster (usually an order of magnitude or more) than
+the previous implementation which employed the corresponding list functions to
+realize these operations.
+
+List and matrix comprehensions have also been optimized to fully take
+advantage of the new operations. This is most noticeable with matrix
+comprehensions, but list comprehensions should be faster as well. Moreover,
+matrix comprehensions drawing values from other matrices now preserve the
+block layout of component matrices, see the ChangeLog and the manual for
+details.
+
+Special thanks are due to Scott Dillard for his substantial contributions
+which, besides the new matrix operations, also include the OpenGL bindings and
+his OpenGL bindings generator which became the new pure-gen utility.
+
+** Pure 0.18 2009-02-22
+
+Besides some bugfixes, fixes in the build system and some refactoring of the
+standard library (e.g., malloc and friends are now in primitives.pure), this
+release adds a getopt module (ported from Q) and marshalling of matrices to
+short*, int*, float*, double* and void* arguments in the C interface.
+Moreover, the language now permits 'public' and 'private' in an 'extern'
+declaration. As usual, please check the ChangeLog for details.
+
+** Pure 0.17 2009-01-30
+
+This release features several minor bugfixes and a few changes and additions
+in the library, please see the ChangeLog for details. Also, a severe
+performance issue with the creation of symbolic matrices (reported by Scott
+E. Dillard) was fixed.
+
+** Pure 0.16 2009-01-12
+
+Yet another bugfix release. Fixes a critical bug reported by Vili Aapro which
+caused generation of wrong pattern-matching tables in some cases. Also adds
+some missing and corrects some existing definitions in the prelude, and fixes
+some quirks with the Makefile. Last but not least, the sources now compile
+cleanly with Bison 2.4 and the forthcoming LLVM 2.5 (svn). As usual, the gory
+details can be found in the ChangeLog.
+
+** Pure 0.15 2008-12-16
+
+Another bugfix release. Moreover, local definitions (when, with) may now span
+the right-hand side and the guard of a rule. Thus local definitions like in
+'foo x = bar y if y>0 when y = baz x end;' now apply to both the rhs and the
+guard. Clauses can still be made local to the guard by placing parentheses.
+Please see the manual for details.
+
+** Pure 0.14 2008-11-21
+
+This release features support for the recently released LLVM 2.4, as well as
+some minor changes in the Unicode support and the C interface, see the
+ChangeLog for details. The biggest change in this release is the new support
+for namespaces, which is based on John Cowan's proposal on the mailing
+list. This encompasses the following language changes:
+
+- New 'public' keyword to explicitly declare public symbols. (This is still
+  the default for all special symbol declarations, such as 'nullary' or
+  'infix'.)
+
+- New 'namespace' keyword which serves to declare and use namespaces. Please
+  refer to the manual for details. Briefly, you create a new namespace with
+  a declaration of the form 'namespace <identifier>;' and then declare the
+  symbols which should belong to the namespace. For instance:
+
+  namespace foo;
+  public foo bar; // 'foo' and 'bar' are public symbols in namespace 'foo'
+  foo x = x-1;
+  bar x = x+1;
+  // ...
+  namespace; // switches back to the default namespace
+
+  The 'namespace' declaration affects *all* symbols in subsequent symbol
+  declarations, including 'extern' declarations. For instance:
+
+  namespace foo;
+  extern double sin(double);
+  foo::sin(0.1);
+
+- New qualified symbol syntax: foo::bar. This gives you access to the (public)
+  symbols in a namespace, and works with both ordinary identifiers and special
+  (nullary and operator) symbols. The namespace must first be introduced with
+  a 'namespace' or 'using namespace' declaration (see above for the former,
+  and below for the latter).
+
+- New 'using namespace' declaration. This gives you access to the (public)
+  symbols in the given namespace(s) without proper qualification. For
+  instance:
+
+  using namespace foo; // opens the namespace 'foo' for searching
+  foo (bar x); // 'foo' and 'bar' resolve to 'foo::foo' and 'foo::bar' here
+  using namespace; // closes the search namespace(s)
+  foo (bar x); // 'foo' and 'bar' are symbols in the default namespace here
+
+  The interpreter first searches the current namespace (as specified with the
+  'namespace' declaration), then the search namespaces specified in the most
+  recent 'using namespace' clause, and finally the default namespace. Note
+  that 'private' symbols are only visible in the *current* namespace, see
+  below for more details on this.
+
+- Private symbols are now limited in scope to a namespace, not a source file.
+  To create and use private symbols, a namespace declaration has to be in
+  effect. You'll have to adapt existing scripts accordingly. For instance:
+
+  namespace foo;
+  private baz; // 'baz' is a private symbol in namespace 'foo'
+  baz x = 2*x;
+  // ...
+  namespace;   // 'baz' is now invisible
+
+** Pure 0.13 2008-11-04
+
+This release sports a lot of minor bugfixes and other cosmetic changes, see
+the ChangeLog for details.
+
+In addition, please note the following language and library changes, as
+discussed on the mailing list. Special thanks are due to John Cowan, Eddie
+Rucker and Max Wolf for bringing these up and helping to get them sorted out.
+
+- Allow 'const nullary' symbols which can be matched, e.g., in 'case'
+  expressions just like a real 'nullary' symbol.
+
+- Swapped '~' and 'not', so that the logical and bitwise operations are now
+  more consistently named ~, &&, || and not/and/or, respectively.
+  Consequently, '!=' and '!==' were also renamed to '~=' and '~==',
+  respectively. Note that previously ~ was used for bitwise and 'not' for
+  logical negation, which was rather confusing, albeit compatible with the
+  naming of the 'not' operation in Haskell and ML.
+
+- Improved Unicode support. As proposed by John Cowan, extended characters in
+  operator symbols are now restricted to symbols U+00A1 through U+00BF,
+  U+00D7, U+00F7 and U+2100 through U+2BFF. All other Unicode characters are
+  now usable in ordinary identifiers just like any ASCII letter, which permits
+  writing Pure programs in almost any language.
+
+Last but not least, Eddie Rucker contributed Pure syntax highlighting for GNU
+nano (http://www.nano-editor.org). Thanks Eddie!
+
+** Pure 0.12 2008-10-09
+
+Another step on the road to Pure 1.0.
+
+- Cosmetic syntax change: Allow the lhs to be omitted in simple rules ('when',
+  'let' etc.) if it is just '_'. This lets you write stuff like, e.g.,
+  'foo x = y when y = ...; puts y; end', which is useful for debugging
+  purposes. Also, 'let x;' provides an alternative to just 'x;' at the
+  toplevel, which suppresses printing the result of x.
+
+- New Lisp-like 'quote' builtin (special form) for quoting expressions.
+  Added a Lisp-like 'quasiquote' to the prelude (see examples/quasiquote.pure
+  for an example).
+
+- 'eval' can now evaluate expressions as well as strings. Also added a new
+  'evalcmd' primitive for executing interactive interpreter commands like
+  'clear' and 'show' (see examples/reflection.pure for an example).
+
+- Overhauled the 'clear', 'dump' and 'show' commands so that they take the
+  same basic set of selection options and work in a consistent fashion now.
+
+- For all practical purposes, the number of definition levels is unlimited
+  now (previous limit was 256).
+
+** Pure 0.11 2008-10-06
+
+This release sports some minor bugfixes as well as a few changes in the
+language as detailed below.
+
+- The old [x;...] list comprehension syntax has been removed (this has already
+been deprecated since Pure 0.7.)
+
+- The grammar was changed to allow arbitrary expressions as guards in
+equations. This means that syntax like 'foo x = bar x if y when y = baz x
+end' is now recognized (previously you had to enclose the 'y when ... end'
+term in parentheses).
+
+- There's direct support for empty lists and tuples in the grammar now, so
+that these are treated in the same way as empty matrices, rather than being
+defined as nullary symbols in the prelude.
+
+- The -F (filename) option of the 'dump' command was renamed to -n, since it
+was too easy to confuse -F with the -f (dump functions) option.
+
+- As a bonus, there's also a new example (trace.pure) showing how to trace
+function calls for debugging purposes.
+
+** Pure 0.10 2008-10-05
+
+Fixed a bug in the expression printer, and added some operations to create
+(sub/super-) diagonal matrices to matrices.pure.
+
+Also please note that the Pure project has moved to Google Code, see
+http://pure-lang.googlecode.com. There's also a new mailing list at
+http://groups.google.com/group/pure-lang.
+
+** Pure 0.9 2008-10-01
+
+Another bugfix release. This one fixes some minor issues with string slices.
+Moreover, contiguous list and string slices of the form x!!(i..j) are now
+optimized to make them work in linear time.
+
+** Pure 0.8 2008-09-28
+
+This is a maintenance release. It fixes a bug in catmap which slipped into the
+0.6 release (reported by Eddie Rucker) and some minor glitches in the Makefile
+and the documentation. Also, the matrix conversion operations in matrices.pure
+have been overhauled (in particular, the matrix-pointer conversions are much
+more complete now). Details can be found in the ChangeLog.
+
+** Pure 0.7 2008-09-26
+
+This release brings an important new feature: GSL (GNU Scientific Library)
+matrix support. Here's a brief overview of the new stuff. For more
+information on GSL please refer to http://www.gnu.org/software/gsl.
+
+GSL double, complex and integer matrices can be created with the new {x,y;u,v}
+syntax, which works more or less like Octave/MATLAB matrices, but using curly
+braces instead of brackets. Also, indices are zero-based (rather than
+one-based) to be consistent with Pure's list and tuple structures. Here are
+some simple examples of matrices:
+
+- {1,2,3}		a row vector consisting of machine ints
+- {1.0;2.0;3.0}		a column vector of double values (';' separates rows)
+- {1,2;3,4}		a 2x2 int matrix
+- {1L,y+1;foo,bar}	a symbolic matrix
+
+Symbolic matrices work like the numeric matrices, but can contain an arbitrary
+mixture of Pure values, and also work if GSL support isn't available. GSL
+matrices are always homogeneous, i.e., they only contain values from one
+numeric type, which in the Pure implementation can be machine ints, double and
+complex double values. If a matrix contains values of different types, or Pure
+values which cannot be stored in a GSL matrix, then a symbolic matrix is
+created instead (this also includes the case of bigints, which are considered
+as symbolic values as far as matrix construction is concerned). If the
+interpreter was built without GSL support then symbolic matrices are the only
+kind of matrices supported by the interpreter.
+
+Pure also provides so-called matrix comprehensions as a convenient means to
+create matrices from a template expression (which can denote either a scalar
+or a submatrix), drawing values from lists or matrices and (optionally)
+filtering the elements with predicates. These work pretty much like list
+comprehensions, but return matrices instead of lists. Generator clauses in
+matrix comprehensions alternate between row and column generation so that
+customary mathematical notation carries over quite easily. Here's a simple
+example showing how to define a function which returns a square identity
+matrix of a given dimension:
+
+> eye n = {i==j|i=1..n;j=1..n};
+> eye 3;
+{1,0,0;0,1,0;0,0,1}
+
+The prelude provides some additional basic matrix operations like determining
+the size and dimensions of a matrix, indexing and slicing, transposition,
+type-checking and various conversions between the different kinds of
+matrices. To these ends, various basic operations to deal with matrix objects
+have been added to the runtime, including some public API operations to create
+and inspect Pure matrix values from external C modules. Moreover, the
+'pointer' function in the prelude can be used to convert matrices to Pure
+pointer values, and marshalling of GSL matrices in the C interface is also
+provided.
+
+Here is a brief synopsis of some important operations which are implemented in
+the prelude (you can find the definitions of these and a bunch of other matrix
+operations in matrices.pure):
+
+- #x			total number of elements
+- dim x			number of rows and columns (as a pair)
+- x'			transpose of a matrix
+- x!i			ith matrix element in row-major order (zero-based)
+- x!(i,j)		jth element in ith row of the matrix (zero-based)
+- x!!is, x!!(is,js)	slicing (is and js are lists of machine ints)
+- x==y, x!=y		matrix comparisons
+
+Adding other operations by interfacing to GSL should be a piece of cake. In
+fact, we plan to provide a comprehensive Pure interface to GSL as a separate
+library in the future.
+
+Other user-visible changes prompted by the introduction of the matrix syntax
+are listed below:
+
+- Changes in the comprehension syntax: '|' is now used to separate the
+template expression and the generator and filter clauses. This change was
+necessary to accommodate the matrix syntax which uses ';' to separate
+different rows in a matrix. For consistency, this applies to both list and
+matrix comprehensions. The old [x;...] syntax is still supported in list
+comprehensions, but is flagged with a "deprecated" warning by the compiler.
+
+- Arithmetic sequences with a stepsize different from 1 are now written x:y..z
+instead of x,y..z. This makes it possible to give the .. operator a higher
+precedence than the ',' operator, which makes writing matrix slices like
+x!!(i..j,k..l) much more convenient.
+
+** Pure 0.6 2008-09-12
+
+New stuff in this release (please see the ChangeLog and the manual for
+details):
+
+- Macros: These are implemented as rewriting rules which are applied at
+compile time, and can be used for all usual preprocessing purposes, including
+the optimization and inlining of function calls at the source level, and the
+programming of user-defined special forms.
+
+- Thunks a.k.a. "futures": These are realized as anonymous parameterless
+closures (a la Alice ML), and are used to implement call-by-need and lazy data
+structures. In particular, the prelude now implements lazy lists a.k.a.
+"streams".
+
+- Private namespaces. You can now declare symbols as private in a module, to
+hide away internal helper functions and constructor symbols, and to keep the
+global public namespace clean.
+
+- Sentries (object finalizers) and references (mutable expression pointers).
+File objects in the system module now employ sentries in order to close
+themselves when they're garbage-collected.
+
+- New interactive startup files (.purerc). These are just normal Pure scripts
+with additional definitions for interactive usage.
+
+- The 'list' command was renamed to 'show' (to avoid a clash with the prelude
+function 'list'), and a new 'dump' command was added. The latter is similar to
+'show', but saves a snapshot of your current interactive environment in a
+file.
+
+- User-defined hook for the expression printer (__show__). This allows you to
+define your own custom print representations for expressions at runtime.
+
+- Syntax highlighting for gedit (contributed by Eddie Rucker, thanks!).
+
+- "PurePad", a little graphical frontend for the Pure interpreter on Windows.
+
+** Pure 0.5 2008-08-24
+
+This release sports LLVM 2.3 support and a bunch of bug fixes and improvements
+in the language, the standard library and the code generator. As usual, please
+check the ChangeLog for details. Here is a brief rundown of the most important
+changes:
+
+- Language: Haskell-like 'as' patterns. Constant definitions. Revised
+list-of-tuples and 'using' syntax, as discussed on the mailing list. New $$
+sequence operator. The XML entity character escapes were updated to the latest
+from W3C.
+
+- Updated syntax highlighting modes. Kate mode now supports folding of
+comments and block structure.
+
+- Improved script and dynamic library search algorithms, as discussed on the
+mailing list.
+
+- Various improvements in the C interface. Also refactored the runtime library
+to provide a semantically complete public API for module writers.
+
+- Improvements and bugfixes in the code generator.
+
+- Library: Jiri Spitz' port of the Q container types (array.pure, dict.pure,
+heap.pure, set.pure). New math.pure module which implements additional
+mathematical functions as well as complex and rational numbers. New time- and
+signal-related functions in the system module.
+
+- More examples. In particular, make sure you have a look at Libor Spacek's
+cool Mayan calendar and his unbelievingly fast n-queens algorithm. :)
+
+- Better OSX support.
+
+- Thanks to Rooslan S. Khayrov's patches, this release now works with LLVM
+2.3. Please note that LLVM 2.2 support has been dropped, as we encountered
+various issues with the LLVM 2.2 JIT.
+
+- Toni Graffy has contributed openSUSE packages (available via Packman),
+Alvaro Castro Castilla a Gentoo ebuild. Ryan Schmidt continues to maintain the
+MacPorts package.
+
+A big thank you to all who reported bugs and contributed code and patches, in
+particular: Alvaro Castro Castilla, Toni Graffy, Rooslan S. Khayrov, Eddie
+Rucker, Ryan Schmidt, Libor Spacek and Jiri Spitz.
+
+** Pure 0.4 2008-06-19
+
+This release features some more bug and portability fixes, a cleanup of the
+source tree and an overhaul of the build system, see the ChangeLog for
+details. Building a separate runtime lib on x86-64 works now (but requires a
+patched LLVM, see the INSTALL file for details). Moreover, it is now possible
+to install different Pure versions in parallel.
+
+An Emacs mode for Pure and support for executing Pure scripts using "shebangs"
+has been added. Paging of the 'list' command is now implemented using the
+program specified with the PURE_MORE environment variable. This allows you to
+disable this option (if PURE_MORE is undefined) or choose any pager program
+and options that you prefer. Define PURE_MORE=more in your shell startup files
+to get back the old behaviour of piping 'list' output through 'more'.
+
+There's also a new syntax for multiple left-hand sides in function definitions
+and 'case' rules, as suggested by Jiri Spitz and discussed on the mailing
+list. Please refer to the manual page for details. To accommodate this change,
+the bitwise operators '&' and '|' were renamed to 'and' and 'or',
+respectively.
+
+** Pure 0.3 2008-06-06
+
+This release sports a lot of improvements as well as bug and portability
+fixes, see the ChangeLog for details. Many memory leaks have been plugged, and
+tail call elimination has been improved a lot. The build system has gone
+through a major overhaul, adding autoconf support. 64 bit support has been
+improved as well, and Pure now builds and runs fine on MS Windows. Many
+library functions have been rewritten to make them tail-recursive, and some
+new functions have been added. Last but not least, the runtime support is now
+implemented as a separate shared library which makes it possible to link
+external modules against the runtime, and reduces the memory footprint when
+multiple instances of the interpreter are run as different processes.
+
+Special thanks to Tim Haynes, John Lunney, Eddie Rucker, Ryan Schmidt, Libor
+Spacek and Jiri Spitz for contributions, suggestions and bug reports.
+
+** Pure 0.2 2008-05-04
+
+On the heels of Pure 0.1 comes the first bugfix release which addresses a
+couple of bugs, misfeatures and Mac OSX compatibility issues, please refer to
+the ChangeLog for details. I also added a more detailed INSTALL guide (thanks
+are due to Eddie Rucker who wrote most of the new material in this guide) and
+updated the manpage with a few minor corrections and some remarks about issues
+raised on the Pure mailing list.
+
+Please note that there are still some issues with Pure on 64 bit systems (as
+well as on Ubuntu running on PowerPC) which are still on my TODO list, these
+will hopefully be fixed in the next release.
+
+Thanks to all who sent in bug reports and patches, in particular: Chris
+Double, Tim Haynes, Eddie Rucker, Ryan Schmidt and Libor Spacek. (I hope I
+didn't forget anyone.)
+
+** Pure 0.1 2008-04-29
+
+The much-awaited initial release. ;-) The interpreter is already fully
+functional, but of course there's still a lot to be done (see the TODO file
+for details). Please note that this is a preliminary, "beta" release, so
+expect some bugs (and please report them to the author!).
+
+The Pure project is now hosted at SourceForge, see http://pure-lang.sf.net. A
+mailing list should soon be available, too.
+
+See the INSTALLATION section in the README file to get up and running quickly.
+After Pure is installed, read the Pure manual page (also available in various
+formats from the Pure website) and have a look at the stuff in the examples
+subdir, especially hello.pure, and review the standard library modules
+(lib/*.pure).
+
+Enjoy!
+
+Albert Graef <Dr.Graef@t-online.de>

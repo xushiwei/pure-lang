@@ -1,0 +1,68 @@
+
+using math, gsl::matrix;
+using namespace gsl::matrix;
+
+// Matrix functions.
+
+let x = dmatrix {1,2,3}; let y = dmatrix {2,3,2}; x; y; x+y;
+
+let x = {0.11,0.12,0.13;0.21,0.22,0.23};
+let y = {1011,1012;1021,1022;1031,1032};
+x; y; x*y;
+
+let x = {11,12,13;21,22,23};
+let y = {1011,1012;1021,1022;1031,1032};
+x; y; x*y;
+
+let x = {11L,12L,13L;21L,22L,23L};
+let y = {1011L,1012L;1021L,1022L;1031L,1032L};
+x; y; x*y;
+
+// Powers of matrices.
+
+map (pow {1,2;3,4}) (0..4);
+// This also works with symbolic matrices:
+map (pow {a,b;c,d}) (0..2);
+
+// Element-wise operations.
+
+-{1,2,3};
+2*{1,2,3};
+2<<{1,2,3};
+{1,2,3} ./ {2,4,8};
+{2,4,8} mod {1,2,3};
+{1,2,3} + i*{2,4,8};
+// This also works with symbolic matrices:
+-{a,b,c};
+2*{a,b,c};
+a<<{1,2,3};
+{a,b,c} ./ {2,4,8};
+{2,4,8} mod {a,b,c};
+{a,b,c} + i*{2,4,8};
+
+// Singular value decomposition.
+
+let x = {1,0,0,0,2;0,0,3,0,0;0,0,0,0,0;0,4,0,0,0}; x;
+let u,s,v = svd x; u;s;v;
+// This should yield the original matrix x:
+u*s*transpose v;
+// The matrices u and transpose v are orthogonal:
+u*transpose u; transpose v*v; // identity matrices, up to rounding issues
+// The diagonal of s yields the singular values in descending order:
+diag s;
+// Solve x*a = b using the computed SVD:
+let b = {2;3;0;0}; let a = svd_solve (u,s,v) b; a;
+// This should yield the original vector b:
+x*a;
+
+// Pseudo inverses and left and right matrix division.
+
+let x = {1,0,0,0,2;0,0,3,0,0;0,0,0,0,0;0,4,0,0,0};
+x; pinv x;
+// This solves the same system as above, using the pseudo inverse of x.
+let b = {2;3;0;0}; pinv x*b;
+// This does exactly the same (left matrix division).
+x\\b;
+// This solves the transposed system using right division, yielding the same
+// result but as a row vector.
+transpose b/transpose x;
