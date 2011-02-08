@@ -1,0 +1,193 @@
+
+/* ffi.pure: A libffi interface. */
+
+using "lib:ffi";
+
+/* This API enables you to call C functions from Pure and vice versa. It goes
+   beyond Pure's built-in C interface in that it also fully supports C structs
+   and makes Pure functions callable from C. Moreover, depending on the libffi
+   implementation, it may also be possible to create wrappers for foreign
+   languages other than C. */
+
+/* Internal operations. We keep these in the __C namespace. You shouldn't have
+   to access these directly. */
+
+namespace __C;
+
+extern ffi_cif *ffi_new_cif(int abi, ffi_type *rtype, ffi_type **atypes);
+extern void ffi_free_cif(ffi_cif *cif);
+extern expr *ffi_fcall(ffi_cif *cif, void *fn, expr *x) = ffi_call;
+extern ffi_closure *ffi_new_closure(ffi_cif *cif, expr *fn);
+extern void ffi_free_closure(ffi_closure *clos, void *code);
+extern void *ffi_closure_addr(ffi_closure *clos);
+extern ffi_type **ffi_typevect(expr *types);
+extern ffi_type *ffi_new_struct_t(ffi_type **elements);
+extern void ffi_free_struct_t(ffi_type *ty);
+extern void *ffi_new_struct(ffi_type *ty, expr *data);
+extern void *ffi_copy_struct(ffi_type *ty, void *data);
+extern void ffi_free_struct(ffi_type *ty, void *data);
+extern expr *ffi_struct_type(expr *x);
+extern expr *ffi_struct_members(expr *x);
+extern expr *ffi_struct_pointers(expr *x);
+extern expr *ffi_struct_member(expr *x, int i);
+extern expr *ffi_struct_pointer(expr *x, int i);
+extern expr *ffi_struct_offsetof(ffi_type *ty, int i);
+extern expr *ffi_put_struct_member(expr *x, int i, expr *y);
+
+/* Define the ABIs and the type numbers known to this libffi implementation.
+   The constant FFI_DEFAULT_ABI is always defined and should be appropriate
+   for most purposes. The type numbers FFI_TYPE_VOID etc. are useful with the
+   type_info function, see below. Use 'show -g FFI_*' to get a full list of
+   these constants. */
+
+extern void ffi_defs(); ffi_defs;
+
+namespace;
+
+using namespace __C;
+
+/* Interface operations. */
+
+/* Atomic types. These all have corresponding type descriptors implemented as
+   pointer values. */
+
+extern ffi_type *ffi_type_void_ptr()	= void_t;
+extern ffi_type *ffi_type_uint8_ptr()	= uint8_t;
+extern ffi_type *ffi_type_sint8_ptr()	= sint8_t;
+extern ffi_type *ffi_type_uint16_ptr()	= uint16_t;
+extern ffi_type *ffi_type_sint16_ptr()	= sint16_t;
+extern ffi_type *ffi_type_uint32_ptr()	= uint32_t;
+extern ffi_type *ffi_type_sint32_ptr()	= sint32_t;
+extern ffi_type *ffi_type_uint64_ptr()	= uint64_t;
+extern ffi_type *ffi_type_sint64_ptr()	= sint64_t;
+extern ffi_type *ffi_type_float_ptr()	= float_t;
+extern ffi_type *ffi_type_double_ptr()	= double_t;
+extern ffi_type *ffi_type_pointer_ptr()	= pointer_t;
+extern ffi_type *ffi_type_uchar_ptr()	= uchar_t;
+extern ffi_type *ffi_type_schar_ptr()	= schar_t;
+extern ffi_type *ffi_type_ushort_ptr()	= ushort_t;
+extern ffi_type *ffi_type_sshort_ptr()	= sshort_t;
+extern ffi_type *ffi_type_uint_ptr()	= uint_t;
+extern ffi_type *ffi_type_sint_ptr()	= sint_t;
+extern ffi_type *ffi_type_ulong_ptr()	= ulong_t;
+extern ffi_type *ffi_type_slong_ptr()	= slong_t;
+
+/* The long double type may not be available on some platforms, in which case
+   longdouble_t is the same as double_t. Also note that Pure has no long
+   double type, and thus long doubles will always be marshalled to Pure double
+   values. In some cases it might still be useful to work with long double
+   values because of the higher internal precision of some operations. */
+
+extern ffi_type *ffi_type_longdouble_ptr() = longdouble_t;
+
+/* The string_t type is a special variant of pointer_t which triggers
+   automatic marshalling from/to Pure string values, including automatic
+   conversions to/from the system encoding. This should be used only for const
+   char* values which are not to be modified by the caller. Also be careful
+   when using string_t as a return value in a C callback (fclos), because the
+   returned string will be malloc'd and thus leak memory unless the caller is
+   prepared to free it. */
+
+extern ffi_type *ffi_type_string_ptr()	= string_t;
+
+/* For convenience, define size_t to be a 32 or 64 bit integer type, as
+   appropriate for the host system. */
+
+let size_t = if SIZEOF_SIZE_T > 4 then uint64_t else uint32_t;
+
+/* Create a struct type. This takes a tuple with the member types and returns
+   a corresponding type descriptor. */
+
+struct_t elements = sentry ffi_free_struct_t ty if ~null ty
+when ty = ffi_new_struct_t (ffi_typevect elements) end;
+
+/* Retrieve information about a type. This returns a tuple (size, align, type,
+   ...) with information about the size, alignment and type number. Struct
+   types are indicated by the type number FFI_TYPE_STRUCT. In this case the
+   remaining elements are the descriptors of the element types. */
+
+extern expr *ffi_type_info(ffi_type *ty) = type_info;
+
+/* Convenience function to get the size of a struct. The function accepts
+   either a struct type or a struct instance. */
+
+public typeof structp;
+sizeof x::pointer = sizeof (typeof x) if structp x;
+sizeof ty::pointer = size when size,_ = type_info ty end;
+
+/* Interface functions to create Pure functions from C functions and vice
+   versa. These take the desired ABI (FFI_DEFAULT_ABI etc.), return type
+   (void_t etc.) and tuple of argument types as arguments. Note that arguments
+   are always passed in uncurried form, as a Pure tuple. */
+
+/* Create a Pure wrapper for a foreign function. */
+
+fcall name::string abi::int rtype::pointer atypes = ffi_call cif fn
+if ~null cif && pointerp fn
+when
+  cif = sentry ffi_free_cif $ ffi_new_cif abi rtype (ffi_typevect atypes);
+  fn  = addr name;
+end;
+
+/* Create a foreign wrapper for a Pure function. This may be unsupported on
+   some platforms. */
+
+fclos fn abi::int rtype::pointer atypes = ptr if ~null ptr
+when
+  cif  = ffi_new_cif abi rtype (ffi_typevect atypes);
+  clos = ffi_new_closure cif fn;
+  ptr  = sentry (ffi_free_closure clos) $ ffi_closure_addr clos;
+end;
+
+/* C struct support. In Pure land, these are represented as "cooked" pointers
+   which carry type information, so that passing struct values as arguments
+   and return values can be implemented in a type-safe manner. Also note that
+   structs are freed automatically when they are garbage-collected, so you
+   must *not* free them manually. */
+
+/* Create a C struct from its type descriptor and a tuple of its members. */
+
+struct ty::pointer data = sentry (ffi_free_struct ty) p if ~null p
+when p = ffi_new_struct ty data end;
+
+/* Create a copy of a C struct given by a pointer. */
+
+copy_struct ty::pointer data::pointer = sentry (ffi_free_struct ty) p
+if ~null p when p = ffi_copy_struct ty data end;
+
+/* Check for struct objects, and get the type descriptor, the member data (as
+   a tuple of Pure values) and the member pointers (a tuple of pointer values)
+   of a struct. The latter are raw pointers which can be used to access and
+   change the fields of the struct using the appropriate pointer operations in
+   the prelude. */
+
+structp x		= pointerp x && pointerp (ffi_struct_type x);
+typeof x::pointer	= ffi_struct_type x if structp x;
+members x::pointer	= ffi_struct_members x if structp x;
+pointers x::pointer	= ffi_struct_pointers x if structp x;
+
+/* Determine the number of members of a struct. */
+
+#x::pointer		= #ffi_struct_pointers x if structp x;
+
+/* Access and modify individual struct members. To these ends, a term like x!i
+   is used to denote the ith member of the struct x. get (x!i) gets the member
+   and put (x!i) y sets it to a new value (which must match the corresponding
+   member type). Moreover, pointer (x!i) yields a raw pointer to the member. */
+
+get (x::pointer!i::int) = ffi_struct_member x i if structp x;
+put (x::pointer!i::int) y = () if structp x && ffi_put_struct_member x i y;
+pointer (x::pointer!i::int) = ffi_struct_pointer x i if structp x;
+
+/* Get offset of an individual struct member. The function accepts either
+   a struct type or a struct instance. */
+
+offsetof (x::pointer!i::int) = ffi_struct_offsetof (typeof x) i if structp x;
+offsetof (x::pointer!i::int) = ffi_struct_offsetof x i;
+
+/* Fallback rules (index out of bounds). */
+
+ffi_struct_member x::pointer i::int = throw out_of_bounds if structp x;
+ffi_put_struct_member x::pointer i::int y = throw out_of_bounds if structp x;
+ffi_struct_pointer x::pointer i::int = throw out_of_bounds if structp x;
+ffi_struct_offsetof x::pointer i::int = throw out_of_bounds;

@@ -1,0 +1,98 @@
+/* sql3_types.pure Mar 18, 2010 */
+
+using system;
+using sql3;
+
+putrows rows = puts "------" $$ do (puts . str) rows;
+
+setup db = () 
+when
+  puts "Begin setup";
+
+  //The table TC has one column for each type
+  sql_create =    
+    "create table TC (" +
+    "c_chars varchar, " + 
+    "t_date varchar, " + 
+    "s_utf8_expr varchar)";
+
+  sql3::exec db "drop table if exists TC";
+  sql3::exec db sql_create;
+
+  puts "End setup";
+end;
+
+bind_select_types db = ()
+when 
+  puts "begin bind_select_types";
+
+  d1 = str_to_day "2010-03-22";
+
+  //Insert some data
+  stm1 = sql3::prep db "cts" "insert into TC values(?,?,?)";
+  sql3::exec stm1 ["Manny", d1, s_expr];
+  sql3::exec stm1 ["Moe",  d1+1, [1,2,3]];
+  sql3::exec stm1 ["Jack", d1+2, ("a",5.0)];
+
+  //Select c_chars
+  stm2 = sql3::prep db "c:" "select c_chars from TC";
+  putrows (sql3::exec stm2 ());
+
+  //Select t_date as a day, then as a string
+  stm3a = sql3::prep db "t:" "select t_date from TC";
+  putrows (sql3::exec stm3a ());
+  stm3b = sql3::prep db "c:" "select t_date from TC";
+  putrows (sql3::exec stm3b ());
+
+  //Select s_utf8
+  stm4 = sql3::prep db "s:" "select s_utf8_expr from TC";
+  putrows (sql3::exec stm4 ());
+
+  puts "End bind_select_types";
+end;
+
+
+/* set up some custom store and retrieve wrappers 
+
+   "t" - "unix epoch days" for easy date arithmetic but stored as
+         strings of the form YYYY-MM-DD in the database for easy
+         reading using, say, sqlite3.
+
+   "s" - Pure expression stored as text in the database. */
+
+
+const DATE_FORMAT = "%Y-%m-%d";
+const SECS_PER_DAY = 86400L;
+
+str_to_day s = (secs div SECS_PER_DAY) + 1
+when
+  tm = imatrix (SIZEOF_TM div SIZEOF_INT + 1);
+  secs = if strptime s DATE_FORMAT tm == ""
+         then mktime tm
+         else throw bad_date;
+end;
+
+day_to_str days = strftime DATE_FORMAT tm
+when
+  secs = days * SECS_PER_DAY;
+  tm = localtime secs;
+end;  
+
+
+const custom_binds = [
+  "t"=>["c", day_to_str,str_to_day],
+  "s"=>["c",str,eval]
+];
+
+
+main = ()
+when
+  db = sql3::open ("abc.db", sql3::SQLITE_OPEN, custom_binds);
+  sql3::begin db;
+  setup db;
+  bind_select_types db;
+  sql3::commit db;
+end;
+
+// Run this:
+main;
