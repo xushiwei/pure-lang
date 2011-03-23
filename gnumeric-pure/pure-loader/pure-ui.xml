@@ -1,0 +1,20 @@
+<ui>
+  <menubar>
+    <menu name="Tools" action="MenuTools">
+      <separator/>
+      <menu name="Pure" action="PureMenu">
+	<menuitem action="PureStop"/>
+	<menuitem action="PureReload"/>
+	<menuitem action="PureEdit"/>
+      </menu>
+    </menu>
+  </menubar>
+<!-- Uncomment to have these buttons added to Gnumeric's standard toolbar.
+  <toolbar name="StandardToolbar">
+    <separator/>
+    <toolitem action="PureStop"/>
+    <toolitem action="PureReload"/>
+    <toolitem action="PureEdit"/>
+  </toolbar>
+-->
+</ui>
