@@ -1,0 +1,152 @@
+
+/* This is a high-level, no-frills wrapper around the liblo functions. It
+   allows you to create an OSC server, as well as receive and send OSC
+   messages from it. For most applications, this is all that you'll ever
+   need. If you need utmost flexibility, however, you'll want to take a look
+   at the lowlevel liblo API. */
+
+using lo;
+using namespace lo;
+
+public osc_recv osc_recv_noblock osc_main;
+
+/* Special C callbacks provided in lo.so. You shouldn't change these, unless
+   you *really* know what you're doing. */
+
+let osc_error = addr "Pure_osc_error";
+let osc_handler = addr "Pure_osc_handler";
+
+/* osc_server: Create a new OSC server thread and perform all necessary
+   initializations so that the server is ready to go. The server is stopped
+   and destroyed automatically when it gets garbage-collected. This function
+   takes a single argument, the port number, which can be specified either as
+   an integer, a string or as the NULL pointer (in the latter case a suitable
+   port number is chosen automatically). In either case the port number can be
+   retrieved with lo::server_thread_get_port if needed. */
+
+/* Please note that only one server can receive messages at any one time, and
+   the message input queue is also shared among all servers. So it isn't
+   useful to have multiple servers active at the same time. However, using the
+   corresponding liblo operations, it is possible to switch between different
+   server threads, please see the liblo documentation for details. */
+
+osc_server port::int = osc_server (str port);
+osc_server port = if null s then s else
+  server_thread_add_method s NULL NULL osc_handler NULL $$
+  server_thread_start s $$ sentry server_thread_free s
+when
+  s::pointer = server_thread_new port osc_error;
+end if stringp port || port===NULL;
+
+/* osc_server_with_proto: Like osc_server above, but also specify the desired
+   protocol (lo::UDP, lo::TCP or lo::UNIX, default is UDP). */
+
+osc_server_with_proto port::int proto::int =
+  osc_server_with_proto (str port) proto;
+osc_server_with_proto port proto::int = if null s then s else
+  server_thread_add_method s NULL NULL osc_handler NULL $$
+  server_thread_start s $$ sentry server_thread_free s
+when
+  s::pointer = server_thread_new_with_proto port proto osc_error;
+end if stringp port || port===NULL;
+
+/* osc_server_multicast: Like osc_server above, but also specify the desired
+   multicast group (see the liblo API documentation for details). */
+
+osc_server_multicast group::string port::int = osc_server group (str port);
+osc_server_multicast group::string port = if null s then s else
+  server_thread_add_method s NULL NULL osc_handler NULL $$
+  server_thread_start s $$ sentry server_thread_free s
+when
+  s::pointer = server_thread_new_multicast group port osc_error;
+end if stringp port || port===NULL;
+
+/* osc_send: Send an OSC message msg of the given type to the given path at
+   the given destination address. The latter must be a lo_address pointer
+   which can be created with the make_address function below. Note that this
+   operation can be used without running a server. */
+
+osc_send a::pointer path::string ty::string msg = send a path ty msg;
+
+/* osc_send_timestamped: Like osc_send above, but also specify a timestamp
+   denoting the time at which the message is to be delivered. The special
+   lo::TT_IMMEDIATE (a.k.a. {0,1}) timetag can be used to indicate that the
+   message is to be delivered immediately, giving the same behaviour as
+   osc_send. */
+
+osc_send_timestamped a::pointer ts path::string ty::string msg =
+  send_timestamped a ts path ty msg if pointerp ts || imatrixp ts && #ts==2;
+
+/* osc_send_from: Like osc_send_timestamped above, but also specify the server
+   (as returned by osc_server) from which the message is to be sent. */
+
+osc_send_from a::pointer s::pointer ts path::string ty::string msg =
+  send_from a (server_thread_get_server s) ts path ty msg
+  if pointerp ts || imatrixp ts && #ts==2;
+
+/* osc_recv: Receive an OSC message. This operation blocks until a message is
+   available, and requires a running server. It returns a tuple consisting of
+   the source address, the timestamp, the message path, the type of the
+   message, and the message data itself. The source address is delivered as a
+   self-collecting lo_address pointer holding the address of the client which
+   sent the message, which can be decoded with lo::decode_address. (The
+   timestamp is only available with liblo 0.26 and later, and only if the
+   message was contained in a bundle, such as messages emitted with
+   osc_send_timestamped; otherwise lo::TT_IMMEDIATE is returned.) */
+
+namespace osc;
+private extern expr *Pure_osc_recv() = recv;
+
+::osc_recv = a, ts, path, types, data when
+  path, m = res; a = message_get_source m;
+  t = message_get_timestamp m;
+  ts = if pointerp t then timetag t 0 else TT_IMMEDIATE;
+  types = message_get_types m; data = message_data m;
+  message_free m;
+end if tuplep res when res = osc::recv end;
+
+/* osc_recv_noblock: Non-blocking version of osc_recv. */
+
+private extern expr *Pure_osc_recv_noblock() = recv_noblock;
+
+::osc_recv_noblock = a, ts, path, types, data when
+  path, m = res; a = message_get_source m;
+  t = message_get_timestamp m;
+  ts = if pointerp t then timetag t 0 else TT_IMMEDIATE;
+  types = message_get_types m; data = message_data m;
+  message_free m;
+end if tuplep res when res = osc::recv_noblock end;
+
+/* osc_flush: Empty the OSC input queue. Call this to remove any stale
+   messages from the input queue, e.g., after restarting the server. */
+
+namespace;
+extern void Pure_osc_flush() = osc_flush;
+
+/* osc_main: A simple main loop which repeatedly reads OSC messages and
+   dispatches them according to the given list of pattern => method hash
+   pairs. Each key in the method table is a glob pattern which is matched
+   against the message path; if it matches, the corresponding method is
+   invoked as follows: method addr ts path types data, where addr is the
+   address of the sender, ts is the timestamp, path is the message path, types
+   the type specification of the message, and data the message data itself, as
+   a tuple. Different methods are tried until one returns the integer 0 to
+   indicate that processing of the message is complete. To exit from the main
+   loop, a method can throw an exception whose value will be reported as
+   osc_main's return value. */
+
+/* TODO: This is just an example. Maybe we should provide something more
+   elaborate here, which also matches the parameter types and does automatic
+   coercions, like what liblo does. */
+
+namespace __C;
+// We don't want to pull in the entire system.pure, so just declare this here.
+extern int fnmatch(char* pat, char* s, int flags);
+
+::osc_main methods = catch id loop with
+  loop = dispatch osc_recv $$ loop;
+  dispatch msg = any (process (list msg)) methods;
+  process msg@(addr::pointer:ts::matrix:path::string:types::string:data)
+  (pat => method) =
+    fnmatch pat path 0 == 0 && method addr ts path types (tuple data) === 0;
+end;
