@@ -1,0 +1,363 @@
+
+// matrix stuff
+
+// NOTE: This test will fail if Pure was built without GSL support.
+
+using math;
+
+// Basic matrix ops.
+
+// int matrix
+let x = {1,2,3;4,5,6};
+
+x; transpose x; reverse x;
+#x; dim x; redim (3,2) x;
+x!(1,1); x!!(0,0..2); x!!(0..1,0..1);
+diag x; supdiag x 1; subdiag x 1; supdiag x 1===subdiag x (-1);
+
+// double matrix
+let x = {1.0,2.0,3.0;4.0,5.0,6.0};
+
+x; transpose x; reverse x;
+#x; dim x; redim (3,2) x;
+x!(1,1); x!!(0,0..2); x!!(0..1,0..1);
+diag x; supdiag x 1; subdiag x 1; supdiag x 1===subdiag x (-1);
+
+// complex matrix
+let x = {1.0+:-2.0,2.0+:-4.0,3.0+:-6.0;4.0+:1.0,5.0+:2.0,6.0+:3.0};
+
+x; transpose x; reverse x;
+#x; dim x; redim (3,2) x;
+x!(1,1); x!!(0,0..2); x!!(0..1,0..1);
+diag x; supdiag x 1; subdiag x 1; supdiag x 1===subdiag x (-1);
+
+// Numeric matrix conversions.
+
+let x = {1,2,3;4,5,6};
+let y = dmatrix x;
+let z = cmatrix y;
+
+x;y;z;
+
+imatrix x===x; dmatrix y===y; cmatrix z===z;
+
+imatrix y===x; re z===y; im z===dmatrix (dim x);
+
+imatrix z; dmatrix z;
+
+// Numeric-symbolic matrix conversions.
+
+let dx = dmatrix 3;
+let ix = imatrix 3;
+let cx = cmatrix 3;
+
+smatrix dx;
+smatrix ix;
+smatrix cx;
+
+smatrixp $ smatrix dx;
+smatrixp $ smatrix ix;
+smatrixp $ smatrix cx;
+
+dmatrix {0.0,0};
+imatrix {0.0,0};
+cmatrix {0.0+:0.0,0};
+
+dmatrix $ smatrix dx;
+imatrix $ smatrix ix;
+cmatrix $ smatrix cx;
+
+let sx = {a,b,0.0};
+
+smatrix sx;
+smatrixp $ smatrix sx;
+
+// Direct list-vector conversions.
+
+dmatrix (0.0..10.0);
+imatrix (0..10);
+cmatrix [x+:0 | x = 0..10];
+smatrix (0..10);
+
+dmatrixp $ dmatrix (0.0..10.0);
+imatrixp $ imatrix (0..10);
+cmatrixp $ cmatrix [x+:0 | x = 0..10];
+smatrixp $ smatrix (0..10);
+
+dmatrix [];
+imatrix [];
+cmatrix [];
+smatrix [];
+
+dmatrixp $ dmatrix [];
+imatrixp $ imatrix [];
+cmatrixp $ cmatrix [];
+smatrixp $ smatrix [];
+
+// Matrix-pointer conversions.
+
+// int matrix
+let x = {1,2,3;4,5,6};
+let y = int_matrix_view (3,2) (pointer x);
+x; y; list x==list y; dim x == reverse (dim y);
+
+let y = double_matrix (2,3) (double_pointer NULL x);
+x; y; x==y;
+
+let y = float_matrix (2,3) (float_pointer NULL x);
+x; y; x==y;
+
+let y = complex_matrix (2,3) (complex_pointer NULL x);
+x; y; x==y;
+
+let y = complex_float_matrix (2,3) (complex_float_pointer NULL x);
+x; y; x==y;
+
+let y = int_matrix (2,3) (int_pointer NULL x);
+x; y; x==y;
+
+let y = short_matrix (2,3) (short_pointer NULL x);
+x; y; x==y;
+
+let y = byte_matrix (2,3) (byte_pointer NULL x);
+x; y; x==y;
+
+// double matrix
+let x = dmatrix {1,2,3;4,5,6};
+let y = double_matrix_view (3,2) (pointer x);
+x; y; list x==list y; dim x == reverse (dim y);
+
+let y = double_matrix (2,3) (double_pointer NULL x);
+x; y; x==y;
+
+let y = float_matrix (2,3) (float_pointer NULL x);
+x; y; x==y;
+
+let y = complex_matrix (2,3) (complex_pointer NULL x);
+x; y; x==y;
+
+let y = complex_float_matrix (2,3) (complex_float_pointer NULL x);
+x; y; x==y;
+
+let y = int_matrix (2,3) (int_pointer NULL x);
+x; y; x==y;
+
+let y = short_matrix (2,3) (short_pointer NULL x);
+x; y; x==y;
+
+let y = byte_matrix (2,3) (byte_pointer NULL x);
+x; y; x==y;
+
+// complex matrix
+let x = cmatrix {1,2,3;4,5,6};
+let y = complex_matrix_view (3,2) (pointer x);
+x; y; list x==list y; dim x == reverse (dim y);
+
+let z = double_matrix_view (2,6) (pointer x);
+z; cat [[a,b]|a+:b=x]==list z;
+
+let y = double_matrix (2,6) (double_pointer NULL x);
+x; y; y==z;
+
+let y = float_matrix (2,6) (float_pointer NULL x);
+x; y; y==z;
+
+let y = complex_matrix (2,3) (complex_pointer NULL x);
+x; y; x==y;
+
+let y = complex_float_matrix (2,3) (complex_float_pointer NULL x);
+x; y; x==y;
+
+let y = int_matrix (2,6) (int_pointer NULL x);
+x; y; y==z;
+
+let y = short_matrix (2,6) (short_pointer NULL x);
+x; y; y==z;
+
+let y = byte_matrix (2,6) (byte_pointer NULL x);
+x; y; y==z;
+
+
+
+//list-like functions
+let x = dmatrix {1,2,3;4,5,6};
+
+let f = \a -> a;
+let y = map f x;
+x; y; list y == map f (list x) && dmatrixp y;
+
+let f = \a -> int a;
+let y = map f x;
+x; y; list y == map f (list x) && imatrixp y;
+
+//these may seem redundant but they exercise distinct code paths
+let f = \a -> if a < 2 then a else "a";
+let y = map f x ;
+x; y; list y == map f (list x) && smatrixp y;
+
+let f = \a -> if a > 2 then a else "a";
+let y = map f x ;
+x; y; list y == map f (list x) && smatrixp y;
+
+let y = foldl (+) 0 x;
+x; y; y == foldl (+) 0 (list x);
+
+let y = foldl1 (+) x;
+x; y; y == foldl1 (+) (list x);
+
+let y = foldr (+) 0 x;
+x; y; y == foldr (+) 0 (list x);
+
+let y = foldr1 (+) x;
+x; y; y == foldr1 (+) (list x);
+
+let f = \a -> a < 4;
+let y = filter f x;
+x; y; list y == filter f (list x);
+
+let f = \i j -> i+j+1.0;
+let y = scanl f 0.0 x;
+x; y; list y == scanl f 0.0 (list x);
+
+let f = \i j -> if doublep i then str (i+j) else 1.0;
+let y = scanl f 0.0 x;
+x; y; list y == scanl f 0.0 (list x);
+
+let f = \i j -> i+j+1.0;
+let y = scanl1 f x;
+x; y; list y == scanl1 f (list x);
+
+let f = \i j -> if doublep i then str (i+j) else 1.0;
+let y = scanl1 f x;
+x; y; list y == scanl1 f (list x);
+
+let f = \i j -> i+j+1.0;
+let y = scanr f 0.0 x;
+x; y; list y == scanr f 0.0 (list x);
+
+let f = \i j -> if doublep j then str (i+j) else 1.0;
+let y = scanr f 0.0 x;
+x; y; list y == scanr f 0.0 (list x);
+
+let f = \i j -> i+j+1.0;
+let y = scanr1 f x;
+x; y; list y == scanr1 f (list x);
+
+let f = \i j -> if doublep j then str (i+j) else 1.0;
+let y = scanr1 f x;
+x; y; list y == scanr1 f (list x);
+
+let x = imatrix {1,2,3;4,5,6};
+
+let f = \a -> a;
+let y = map f x;
+x; y; list y == map f (list x) && imatrixp y;
+
+let f = \a -> double a;
+let y = map f x;
+x; y; list y == map f (list x) && dmatrixp y;
+
+let f = \a -> if a < 2 then a else "a";
+let y = map f x ;
+x; y; list y == map f (list x) && smatrixp y;
+
+let f = \a -> if a > 2 then a else "a";
+let y = map f x ;
+x; y; list y == map f (list x) && smatrixp y;
+
+let y = foldl (:) [] x;
+x; y; y == foldl (:) [] (list x);
+
+let y = foldr (:) [] x;
+x; y; y == foldr (:) [] (list x);
+
+let f = \a -> a < 4;
+let y = filter f x;
+x; y; list y == filter f (list x);
+
+let f = \i j -> i+j+1;
+let y = scanl f 0 x;
+x; y; list y == scanl f 0 (list x);
+
+let f = \i j -> i+j+1;
+let y = scanl f 0 x;
+x; y; list y == scanl f 0 (list x);
+
+let f = \i j -> i+j+1;
+let y = scanr f 0 x;
+x; y; list y == scanr f 0 (list x);
+
+
+
+let x = {"1","2","3";"aa","bb","cc"};
+
+let f = \_ -> 1.0;
+let y = map f x;
+x; y; list y == map f (list x) && dmatrixp y;
+
+let f = \_ -> 1;
+let y = map f x;
+x; y; list y == map f (list x) && imatrixp y;
+
+let f = \a -> a;
+let y = map f x ;
+x; y; list y == map f (list x) && smatrixp y;
+
+let y = foldl (+) "0" x;
+x; y; y == foldl (+) "0" (list x);
+
+let y = foldr (+) "0" x;
+x; y; y == foldr (+) "0" (list x);
+
+let f = \a -> #a == 1;
+let y = filter f x;
+x; y; list y == filter f (list x);
+
+let y = scanl (+) "" x;
+x; y; list y == scanl (+) "" (list x);
+
+let y = scanr (+) "" x;
+x; y; list y == scanr (+) "" (list x);
+
+// Some interesting corner cases.
+
+all (\x->x>0) {};
+any (\x->x>0) {};
+do foo {};
+map succ {};
+zipwith (+) {} {};
+zipwith (+) {a,b} {};
+zipwith (+) {} {a,b};
+zipwith (+) {a;b} {};
+zipwith (+) {} {a;b};
+zip3 {} {} {};
+zip3 {a,b} {A,B} {};
+zip3 {a,b} {} {A,B};
+zip3 {} {a,b} {A,B};
+zip3 {a;b} {A;B} {};
+zip3 {a;b} {} {A;B};
+zip3 {} {a;b} {A;B};
+foldl (+) 0 {};
+foldl1 (+) {};
+foldr (+) 0 {};
+foldr1 (+) {};
+scanl (+) 0 {};
+scanl1 (+) {};
+scanr (+) 0 {};
+scanr1 (+) {};
+
+// 0xn matrices
+dim$zipwith (+) {a,b} (redim (0,2) {});
+dim$zipwith (+) (redim (0,2) {}) {a,b};
+
+
+// Matrix comprehensions.
+
+// alternating row and column generators
+{x,y|x=[1,2];y=[a,b]};
+
+// block layout
+{x,y|x={1;2};y={a,b}};
+{x,y|x={1;2};y={a,b}} === {x,y|x=[1,2];y=[a,b]};
+
+{x,y|x={1,2;3,4};y={a,b;c,d}};
