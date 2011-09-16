@@ -1,0 +1,38 @@
+
+# To compile the C and Fortran examples in this directory, just type 'make'.
+
+# NOTE: fortran$(DLL) requires GNU Fortran to build.
+examples = poor$(EXE) sort$(DLL) fortran$(DLL)
+
+EXE=@EXEEXT@
+DLL=@DLLEXT@
+CC = @CC@
+FC = gfortran
+host = @host@
+shared = -shared
+
+# OSX
+ifneq "$(findstring -darwin,$(host))" ""
+shared = -dynamiclib
+endif
+
+# 64 bit, needs -fPIC flag
+ifneq "$(findstring x86_64-,$(host))" ""
+PIC = -fPIC
+endif
+
+all: $(examples)
+
+poor$(EXE): poor.c
+	$(CC) -o $@ $^ -lpure
+
+sort$(DLL): sort.c
+	$(CC) $(shared) $(PIC) -o $@ $^ -lpure
+
+# GNU Fortran example.
+
+fortran$(DLL): fortran.f90
+	$(FC) $(shared) $(PIC) -o $@ $^
+
+clean:
+	rm -f $(examples) *.o *~

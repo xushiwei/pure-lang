@@ -1,0 +1,213 @@
+
+/* This one is in the liblo headers, but not wrapped automatically as it's an
+   array constant. Define it as a Pure vector which can readily be passed to
+   liblo functions expecting a timestamp value. */
+
+const lo::TT_IMMEDIATE = {0,1};
+
+/* These are varargs functions in the liblo interface, so we massage them
+   somewhat to make them callable from Pure. */
+
+extern int Pure_lo_message_add(void*, char*, expr*) = message_add;
+extern int Pure_lo_send(void*, char*, char*, expr*) = send;
+extern int Pure_lo_send_timestamped(void*, lo_timetag*, char*, char*, expr*)
+ = send_timestamped;
+extern int Pure_lo_send_from(void*, void*, lo_timetag*, char*, char*, expr*)
+ = send_from;
+
+/* These need special treatment, so that we do not leak memory on the
+   dynamically allocated strings returned by these functions. */
+
+private extern void *lo_address_get_url(void*);
+private extern void *lo_server_get_url(void*);
+private extern void *lo_server_thread_get_url(void*);
+public address_get_url server_get_url server_thread_get_url;
+
+address_get_url s::pointer = cstring $ lo_address_get_url s;
+server_get_url s::pointer = cstring $ lo_server_get_url s;
+server_thread_get_url s::pointer = cstring $ lo_server_thread_get_url s;
+
+/* liblo allows these to be invoked also with NULL pointers as strings, so we
+   emulate this behaviour here. */
+
+private extern void *lo_address_new(void*,void*);
+address_new host::pointer port::pointer =
+  lo_address_new host port if host==NULL && port==NULL;
+address_new host::pointer port::string =
+  lo_address_new host (cooked $ byte_cstring port) if host==NULL;
+address_new host::string port::pointer =
+  lo_address_new (cooked $ byte_cstring host) port if port==NULL;
+
+private extern void *lo_server_new(void*,void*);
+server_new port::pointer cb::pointer =
+  lo_server_new port cb if port==NULL;
+
+private extern void *lo_server_new_with_proto(void*,int,void*);
+server_new_with_proto port::pointer proto::int cb::pointer =
+  lo_server_new_with_proto port proto cb if port==NULL;
+
+private extern void *lo_server_new_multicast(char*,void*,void*);
+server_new_multicast group::string port::pointer cb::pointer =
+  lo_server_new_multicast group port cb if port==NULL;
+
+private extern void *lo_server_thread_new(void*,void*);
+server_thread_new port::pointer cb::pointer =
+  lo_server_thread_new port cb if port==NULL;
+
+private extern void *lo_server_thread_new_with_proto(void*,int,void*);
+server_thread_new_with_proto port::pointer proto::int cb::pointer =
+  lo_server_thread_new_with_proto port proto cb if port==NULL;
+
+private extern void *lo_server_thread_new_multicast(char*,void*,void*);
+server_thread_new_multicast group::string port::pointer cb::pointer =
+  lo_server_thread_new_multicast group port cb if port==NULL;
+
+private extern void *lo_server_add_method(void*,void*,void*,void*,void*);
+server_add_method s::pointer path::pointer types::pointer h::pointer data::pointer =
+  lo_server_add_method s path types h data if path==NULL && types==NULL;
+server_add_method s::pointer path::pointer types::string h::pointer data::pointer =
+  lo_server_add_method s path (cooked $ byte_cstring types) h data if path==NULL;
+server_add_method s::pointer path::string types::pointer h::pointer data::pointer =
+  lo_server_add_method s (cooked $ byte_cstring path) types h data if types==NULL;
+
+private extern void lo_server_del_method(void*,void*,void*);
+server_del_method s::pointer path::pointer types::string =
+  lo_server_del_method s path types if path==NULL && types==NULL;
+server_del_method s::pointer path::pointer types::string =
+  lo_server_del_method s path (cooked $ byte_cstring types) if path==NULL;
+server_del_method s::pointer path::string types::string =
+  lo_server_del_method s (cooked $ byte_cstring path) types if types==NULL;
+
+private extern void *lo_server_thread_add_method(void*,void*,void*,void*,void*);
+server_thread_add_method s::pointer path::pointer types::pointer h::pointer data::pointer =
+  lo_server_thread_add_method s path types h data if path==NULL && types==NULL;
+server_thread_add_method s::pointer path::pointer types::string h::pointer data::pointer =
+  lo_server_thread_add_method s path (cooked $ byte_cstring types) h data if path==NULL;
+server_thread_add_method s::pointer path::string types::pointer h::pointer data::pointer =
+  lo_server_thread_add_method s (cooked $ byte_cstring path) types h data if types==NULL;
+
+private extern void lo_server_thread_del_method(void*,void*,void*);
+server_thread_del_method s::pointer path::pointer types::string =
+  lo_server_thread_del_method s path types if path==NULL && types==NULL;
+server_thread_del_method s::pointer path::pointer types::string =
+  lo_server_thread_del_method s path (cooked $ byte_cstring types) if path==NULL;
+server_thread_del_method s::pointer path::string types::string =
+  lo_server_thread_del_method s (cooked $ byte_cstring path) types if types==NULL;
+
+/* Convenience functions to decode liblo OSC messages and addresses. Note that
+   all (known) types of data are copied so that the data can still be accessed
+   after the original message holding the data has been destroyed. */
+
+public decode_arg decode_argv;
+
+decode_arg "i" p::pointer = get_int p;
+decode_arg "h" p::pointer = get_int64 p;
+decode_arg "c" p::pointer = get_byte p;
+decode_arg "f" p::pointer = get_float p;
+decode_arg "d" p::pointer = get_double p;
+decode_arg "b" p::pointer = sentry blob_free $ blob_new n p
+  when n, p = blob_datasize p, blob_dataptr p end;
+decode_arg "s" p::pointer = cstring_dup p;
+decode_arg "S" p::pointer = cstring_dup p;
+decode_arg "t" p::pointer = int_matrix 2 p;
+decode_arg "m" p::pointer = map ubyte $ byte_matrix 4 p;
+decode_arg "T" p::pointer = ();
+decode_arg "F" p::pointer = ();
+decode_arg "N" p::pointer = ();
+decode_arg "I" p::pointer = ();
+decode_arg _   p::pointer = p; // unknown
+
+decode_argv types::string p::pointer n::int = tuple $
+  zipwith decode_arg (chars types)
+  [get_pointer (p+i*SIZEOF_POINTER) | i = 0..n-1];
+
+/* This returns a triple host, port, protocol. */
+
+public decode_address;
+
+decode_address a::pointer =
+  address_get_hostname a, address_get_port a, address_get_protocol a;
+
+public message_data;
+
+message_data m::pointer =
+  decode_argv (message_get_types m) (message_get_argv m) (message_get_argc m);
+
+/* Convenience function to create a self-collecting lo_blob from either a Pure
+   blob or a pair consisting of the data size (int) and a raw C pointer. */
+
+public make_blob decode_blob;
+
+make_blob p::pointer = sentry blob_free $ blob_new (#p) p if blobp p;
+make_blob (n::int, p::pointer) = sentry blob_free $ blob_new n p;
+
+/* Convenience function to decode a lo_blob to a pair consisting of the data
+   size (int) and a C pointer. In either case, the returned data pointer is a
+   dynamically allocated copy which frees itself after use. */
+
+public decode_blob;
+
+private extern void *memcpy(void*,void*,size_t);
+private copy_blob;
+copy_blob n::int p::pointer =
+  if null q then throw malloc_error else cooked $ memcpy q p n
+  when n = uint n; q = malloc n end;
+
+decode_blob b::pointer = n,copy_blob n p when
+  /* Don't remove the extra 'b' parameter here, it's required to keep the
+     original blob around while we're still reading it! */
+  _,n,p = b, blob_datasize b, blob_dataptr b;
+end;
+
+/* Convenience function to create a self-collecting lo_address pointer which
+   can be passed to the lo::send function. The argument can be either another
+   liblo_address (denoting the default address if NULL; otherwise a copy of
+   the address pointer is taken), () (same as NULL), a port number or string,
+   a pair consisting of a hostname and a port number/string, or a triple
+   consisting of a hostname, a port number/string and a protocol (the latter
+   requires liblo 0.26 or later). */
+
+public make_address;
+
+make_address a::pointer
+  = sentry address_free $ address_new NULL NULL if null a;
+  = sentry address_free $ address_new_from_url $ address_get_url a;
+
+make_address ()
+  = sentry address_free $ address_new NULL NULL;
+
+make_address port::string
+  = sentry address_free $ address_new NULL port;
+
+make_address port::int
+  = make_address (str port);
+
+make_address (host::string, port::string)
+  = sentry address_free $ address_new host port;
+
+make_address (host::string, port::int)
+  = make_address (host, str port);
+
+make_address (host::string, port::string, proto::int)
+  = sentry address_free $ address_new_with_proto host port proto;
+
+make_address (host::string, port::int, proto::int)
+  = make_address (host, str port, proto);
+
+/* Convenience function to create an OSC timetag at a given (nonnegative)
+   offset in seconds (a double) from another timetag, which can be either a
+   lo_timetag pointer or a Pure int vector. If the given timetag is NULL, the
+   current time is assumed (as given by lo::timetag_now). The return value is
+   always a Pure int vector which can readily be passed to liblo functions
+   expecting a timestamp value. */
+
+public timetag;
+
+timetag p::pointer offs = {ts!0+secs,ts!1+ticks} when
+  ts = int_matrix 2 p; if null p then timetag_now ts else ();
+  secs = int (trunc offs); ticks = int (frac offs*4294967296.0);
+end if offs>=0;
+
+timetag ts::matrix offs = {ts!0+secs,ts!1+ticks} when
+  secs = int (trunc offs); ticks = int (frac offs*4294967296.0);
+end if imatrixp ts && offs>=0;
