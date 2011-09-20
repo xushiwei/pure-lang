@@ -1,0 +1,186 @@
+
+/* sockets.pure: A basic socket interface. */
+
+/* Copyright (c) 2010 by Albert Graef <Dr.Graef@t-online.de>.
+
+   This file is part of the Pure standard library.
+
+   The Pure standard library is free software: you can redistribute it and/or
+   modify it under the terms of the GNU Lesser General Public License as
+   published by the Free Software Foundation, either version 3 of the License,
+   or (at your option) any later version.
+
+   Pure is distributed in the hope that it will be useful, but WITHOUT ANY
+   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+   FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License for
+   more details.
+
+   You should have received a copy of the GNU Lesser General Public License
+   along with this program.  If not, see <http://www.gnu.org/licenses/>. */
+
+using "lib:sockets";
+
+extern void __socket_defs();
+extern sockaddr* local_sockaddr(char*);
+extern sockaddr* make_sockaddr(int, char*, char*);
+extern sockaddr** make_sockaddrs(int, char*, char*);
+extern sockaddr* new_sockaddr();
+extern int sockaddr_family(sockaddr*);
+extern char* sockaddr_hostname(sockaddr*);
+extern char* sockaddr_ip(sockaddr*);
+extern int sockaddr_len(sockaddr*);
+extern char* sockaddr_path(sockaddr*);
+extern int sockaddr_port(sockaddr*);
+extern char* sockaddr_service(sockaddr*);
+
+// Define some manifest constants.
+__socket_defs;
+
+/* Socket functions from the C library. */
+
+extern int pure_socket(int domain, int ty, int protocol) = socket;
+extern int pure_socketpair(int domain, int ty, int protocol, int *sv) = socketpair;
+extern int pure_shutdown(int fd, int how) = shutdown;
+// Windows uses this to close a socket. On POSIX systems this is just the same
+// as close().
+extern int pure_closesocket(int fd) = closesocket;
+
+// Establish connections.
+
+extern int pure_listen(int sockfd, int backlog) = listen;
+namespace __C;
+// We provide convenience wrappers around these below.
+extern int pure_accept(int sockfd, sockaddr *addr, int *addrlen) = accept;
+extern int pure_bind(int sockfd, sockaddr *addr, int addrlen) = bind;
+extern int pure_connect(int sockfd, sockaddr *addr, int addrlen) = connect;
+namespace;
+
+accept fd::int addr::pointer = __C::accept fd addr {sockaddr_len addr};
+bind fd::int addr::pointer = __C::bind fd addr (sockaddr_len addr);
+connect fd::int addr::pointer = __C::connect fd addr (sockaddr_len addr);
+
+// Socket I/O. Note that on POSIX systems you can also just fdopen the socket
+// descriptor and use the standard file I/O operations from the system module
+// instead.
+
+extern size_t pure_recv(int fd, void *buf, size_t len, int flags) = recv;
+extern size_t pure_send(int fd, void *buf, size_t len, int flags) = send;
+namespace __C;
+// We provide convenience wrappers around these below.
+extern size_t pure_recvfrom(int fd, void *buf, size_t len, int flags,
+			    sockaddr *addr, int *addrlen) = recvfrom;
+extern size_t pure_sendto(int fd, void *buf, size_t len, int flags,
+			  sockaddr *addr, int addrlen) = sendto;
+namespace;
+
+recvfrom fd::int buf::pointer len::int flags::int addr::pointer |
+recvfrom fd::int buf::pointer len::bigint flags::int addr::pointer
+  = __C::recvfrom fd buf len flags addr {sockaddr_len addr};
+
+sendto fd::int buf::pointer len::int flags::int addr::pointer |
+sendto fd::int buf::pointer len::bigint flags::int addr::pointer
+  = __C::sendto fd buf len flags addr (sockaddr_len addr);
+
+// Socket information.
+
+namespace __C;
+// We provide convenience wrappers around these below.
+extern int pure_getsockname(int fd, sockaddr *addr, int *addrlen) = getsockname;
+extern int pure_getpeername(int fd, sockaddr *addr, int *addrlen) = getpeername;
+namespace;
+
+getsockname fd::int addr::pointer
+  = __C::getsockname fd addr {sockaddr_len addr};
+
+getpeername fd::int addr::pointer
+  = __C::getpeername fd addr {sockaddr_len addr};
+
+extern int pure_getsockopt(int fd, int level, int name, void *val, int *len)  = getsockopt;
+extern int pure_setsockopt(int fd, int level, int name, void *val, int len) = setsockopt;
+
+/* Construction of socket addresses for bind et al. */
+
+// Declare this here in case it isn't defined, to prevent compiler warnings.
+public AF_UNIX;
+
+// Compile time check to see whether we have AF_UNIX.
+const HAVE_AF_UNIX = intp AF_UNIX;
+
+/* Return a readable description of a socket address. You should be able to
+   pass this into sockaddr again to get the original address. */
+
+sockaddr_info addr::pointer
+  = if family == AF_INET || family == AF_INET6 then
+      family, sockaddr_ip addr, sockaddr_port addr
+    else if HAVE_AF_UNIX && family == AF_UNIX then
+      family, sockaddr_path addr
+    else () when family = sockaddr_family addr end;
+
+/* Use this to create a pointer to an empty socket address suitable to hold
+   the socket address result of routines like accept, getsockname and recvfrom
+   which return a socket address. The returned pointer automatically frees
+   itself when garbage-collected. */
+
+sockaddr ()
+  = cooked addr if ~null addr
+    when addr = new_sockaddr end;
+
+/* Use this to create a local (AF_UNIX) address. */
+
+sockaddr path::string
+  = cooked addr if ~null addr
+    when addr = local_sockaddr path end;
+sockaddr (family::int,path::string)
+  = sockaddr path if HAVE_AF_UNIX && family == AF_UNIX;
+
+/* Convenience wrapper around make_sockaddr. This uses getaddrinfo() from the
+   library to retrieve an AF_INET or AF_INET6 address for the given hostname
+   (or numeric IP address in string form) and port (specified either as an int
+   or a string). The returned pointer automatically frees itself when
+   garbage-collected. */
+
+sockaddr addr@(host::string,port::string) |
+sockaddr addr@(host::string,port::int) = sockaddr (AF_UNSPEC,addr);
+
+sockaddr (family::int,host::string,port::int)
+  = sockaddr (family,host,str port);
+
+sockaddr (family::int,host::string,port::string)
+  = cooked addr if ~null addr
+    when addr = make_sockaddr family host port end;
+
+/* Convenience wrapper around make_sockaddrs. This works like sockaddr above,
+   but retrieves a list of *all* matching addresses (sockaddr gives just the
+   first of these, if any). */
+
+sockaddrs addr@(host::string,port::string) |
+sockaddrs addr@(host::string,port::int) = sockaddrs (AF_UNSPEC,addr);
+
+sockaddrs (family::int,host::string,port::int)
+  = sockaddrs (family,host,str port);
+
+sockaddrs (family::int,host::string,port::string)
+  // The list commonly has multiple entries for the same host but possibly
+  // different protocols, get rid of those.
+= map (!1) $ sort seqless $ uniq $ sort less $
+  zip (1..#addrs) $ map (cooked.pointer_cast sockaddr_t) addrs with
+  uniq []         = [];
+  uniq [a]	  = [a];
+  uniq (a1:a2:as) = uniq (a1:as) if equal a1 a2;
+  uniq (a1:as)	  = a1 : uniq as otherwise;
+  equal (_,a1::pointer) (_,a2::pointer)
+  = sockaddr_info a1 == sockaddr_info a2;
+  less (_,a1::pointer) (_,a2::pointer)
+  = less (sockaddr_info a1) (sockaddr_info a2) with
+    less (fam1,ip1,port1) (fam2,ip2,port2)
+      = fam1<fam2 || fam1==fam2 && (ip1<ip2 || ip1==ip2 && port1<port2);
+  end;
+  seqless (n1,_) (n2,_) = n1<n2;
+end when
+  addrs = list $ takewhile (\p->~null p)
+  	  [get_pointer (res+i*SIZEOF_POINTER) | i = 0..inf];
+  free res;
+  sockaddr_t = pointer_tag "sockaddr*";
+end if ~null res when
+  res = make_sockaddrs family host port;
+end;

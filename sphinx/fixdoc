@@ -1,0 +1,9 @@
+# Synopsis: fixdoc rst-input-file > rst-output-file
+
+{
+  # Put the contents directive under .. only:: html and make it local.
+  sub(/^\.\. contents::[ \t]*/, ".. only:: html\n\n   .. contents:: :local:");
+  # Remove the sectnum directive, it doesn't work with sphinx.
+  sub(/^\.\. sectnum::[ \t]*/, "");
+  print;
+}

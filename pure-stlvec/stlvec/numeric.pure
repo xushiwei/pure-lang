@@ -1,0 +1,39 @@
+/* numeric.pure -- Pure interface for C++ STL numeric algorithms
+    
+Copyright (c) 2011 by Peter Summerland <p.summerland@gmail.com>.
+
+All rights reserved.
+
+This software is is part of pure-stlvec, an addon to the Pure Programming
+Language (http://code.google.com/p/pure-lang/).
+
+This software is distributed under a BSD-style license in the hope that it
+will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the COPYING file
+included with the pure-stlvec distribution package for details.
+
+*/
+
+using stlvec;
+using "lib:stlalgorithm";
+
+namespace stl;
+
+private extern expr*  sva_accumulate(expr* it, expr* val, expr* bin_fun);
+private extern expr*  sva_inner_product(expr* it1,
+                                        expr* it2, expr* val,
+                                        expr* bin_fun1, expr* bin_fun2);
+private extern int  sva_partial_sum(expr* it1, expr* it2, expr* bin_fun);
+private extern int  sva_adjacent_difference(expr* it1, expr* it2,
+                                             expr* bin_fun);
+
+accumulate it::svit val bin_fun  = sva_accumulate it val bin_fun;
+
+inner_product it1::svit it2::svit val bin_fun1 bin_fun2  =
+  sva_inner_product it1 it2 val bin_fun1 bin_fun2;
+
+partial_sum it1::svit it2::mutable_svit bin_fun = 
+  sva_partial_sum it1 it2 bin_fun;
+
+adjacent_difference it1::svit it2::mutable_svit bin_fun = 
+  sva_adjacent_difference it1 it2 bin_fun;

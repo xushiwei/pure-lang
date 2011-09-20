@@ -1,0 +1,31 @@
+
+/* Calling C functions from Pure using libffi. */
+
+using ffi;
+
+/* Safe malloc with automatic finalization. */
+
+smalloc size::int = sentry free p if ~null p when p = malloc size end;
+
+/* Examples: Create call interfaces to the puts and gets functions from the C
+   library and invoke the resulting functions. This works similar to Pure's
+   built-in C interface, but allows you to create the functions at runtime. */
+
+let puts = fcall "puts" FFI_DEFAULT_ABI uint_t string_t;
+
+puts "Hello, world!";
+
+let gets = fcall "gets" FFI_DEFAULT_ABI string_t pointer_t;
+
+puts "Enter a line:";
+puts $ "You typed: " + gets (smalloc 1024);
+
+/* One notable difference to extern functions is that functions created with
+   libffi are always invoked in uncurried form, i.e., arguments have to be
+   supplied as a tuple. Here is an example of a function which takes two
+   double arguments. */
+
+let fmod = fcall "fmod" FFI_DEFAULT_ABI double_t (double_t,double_t);
+let res = fmod (5.3,0.7);
+
+puts $ "fmod (5.3,0.7) = " + str res;
