@@ -339,8 +339,8 @@ function descriptions represent specific types of Pure objects:
 sv
   stlvec (mutable or immutable)
 
-imsv
-  immutable stlvec
+csv
+  const (i.e., immutable) stlvec
 
 msv
   mutable stlvec
@@ -524,7 +524,16 @@ This representation may change in the future, and must not be relied upon
 by client modules. In particular, one must never attempt to use the
 embedded pointer directly.
 
-Three type tags are provided:
+Functions that modify a stlvec will simply fail unless the stlvec is
+mutable::
+
+   > update v2 0 100;
+   update (CONST_STLVEC #<pointer 0x9f07690>) 0 100
+
+Types
+-----
+
+Three type tags are provided for stlvecs:
 
 .. type:: mutable_stlvec /type
 
@@ -541,11 +550,17 @@ Three type tags are provided:
    The type for a stlvec, mutable or immutable. The stvec can be constructed
    with STLVEC or CONST_STLVEC.
 
-Functions that modify a stlvec will simply fail unless the stlvec is
-mutable::
+In addition there are two type tags for stlvec iterator tuples:
 
-   > update v2 0 100;
-   update (CONST_STLVEC #<pointer 0x9f07690>) 0 100
+.. type:: svit /type
+
+   The type for an iterator tuple. The underlying stlvec can be mutable
+   or immutable.
+
+.. type:: mutable_svit /type
+
+   The type for an iterator tuple whose underlying stlvec is  mutable.
+ 
 
 Support for Copy-On-Write Semantics
 -----------------------------------
@@ -607,7 +622,16 @@ stl::svend).
 
 .. function:: prefix #  sv
 
-   return the size of sv
+   return the number or elements in sv
+
+.. function:: size (sv,first,last)
+
+   returns the number of elements in sv[first,last)
+
+.. function:: bounds (sv,first,last)
+
+   returns the pair (i,j) where i is first and j is last except that
+   stl::begin is converted to 0 and stl::svend is converted to #sv
 
 .. function:: reserve msv count
 
@@ -681,6 +705,52 @@ stl::svend).
 Note that ``==`` and ``~==`` are not defined for iterator tuples (the rules
 would never be executed because == is defined on tuples in the Prelude)
 
+String Representation
+---------------------
+
+The stlvec module provides tostr, a function for producing string
+representations stlvec that can be helpful for debugging and other purposes.
+
+.. function:: tostr (max_sz,sep) (sv,first,last)
+
+   returns a string representation of the range sv[first,last) where max_sz is
+   the maximum number of elements to print. If max_sz <= 0 tostr uses max_sz
+   of 100. sep, an optional parameter with default value "," is inserted after
+   each element.
+
+Here are some examples::
+
+   > let x = stlvec (1..10);
+
+   > tostr 0 x;
+   "sv{1,2,3,4,5,6,7,8,9,10}"
+
+   > tostr 3 x;
+   "sv{1,2,3,...}"
+
+   > tostr 0 (x,1,7);
+   "sv{ 2,3,4,5,6,7 }" 
+
+   > tostr 3 (x,2,7);
+   "sv{ 3,4,5,... }"
+
+   > puts $ tostr (3,",\n   ") (x,0,4);
+   sv{1,
+      2,
+      3,
+      ... }
+
+The tostr function can be used with __show__. E.g.,::
+
+   > __show__ it::svit = tostr 5 it;
+
+   > x;
+   sv{1,2,3,4,5,...}
+
+   > (stlconst x);
+   csv{1,2,3,4,5,...}
+
+
 Convenience Functions
 ---------------------
 
@@ -731,10 +801,6 @@ matrixes, primarily for use in matrix comprehensions.
 .. function:: colmap /stlvec unary_fun (sv, first, last)
 
 .. function:: colcatmap /stlvec unary_fun (sv, first, last)
-
-   
-
-
 
 Please note that "stlvec to stlvec" functions are provided by the pure-stl
 algorithm modules. Thus, for example, the stlvec module does not provide a
