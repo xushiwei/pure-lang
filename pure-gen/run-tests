@@ -1,0 +1,50 @@
+#! /bin/bash
+
+# This needs gcc >=4.3 on your PATH or in /c/gcc-4.3/bin on Windows.
+# If not, you'll have to set PATH accordingly.
+export PATH=.:/c/gcc-4.3/bin:$PATH
+
+host=`config.guess`
+diff=diff
+case "$host" in
+  *-*-mingw*) diff="diff --strip-trailing-cr";;
+esac
+
+echo "#define DUMMY 99" > dummy.h
+echo "extern int rand(void);" >> dummy.h
+
+# Check that dump-ast works:
+
+dump-ast dummy.h > dummy.ast
+$diff dummy.ast - > /dev/null <<EOF
+(CDeclExt (CDecl [(CStorageSpec CExtern),(CTypeSpec CIntType)] [((Just (CDeclr (Just "rand") [(CFunDeclr (Right ([(CDecl [(CTypeSpec CVoidType)] [])],0)) [])] Nothing [])),Nothing,Nothing)]) "dummy.h")
+
+EOF
+
+if [ $? == 0 ]; then
+  echo "dump-ast: ok"
+else
+  echo "dump-ast: FAILED"
+  rm -f dummy.*
+  exit 1
+fi
+
+# Check that pure-gen works:
+
+DUMP_AST=dump-ast pure-gen dummy.h
+$diff dummy.pure - > /dev/null <<EOF
+/* dummy.h: */
+const DUMMY = 99;
+extern int rand();
+EOF
+
+if [ $? == 0 ]; then
+  echo "pure-gen: ok"
+else
+  echo "pure-gen: FAILED"
+  rm -f dummy.*
+  exit 1
+fi
+
+rm -f dummy.*
+exit 0
