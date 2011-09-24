@@ -1,0 +1,44 @@
+
+/* Copyright (c) 2010 by Albert Graef.
+
+   This file is part of pure-octave.
+
+   pure-octave is free software: you can redistribute it and/or modify it
+   under the terms of the GNU General Public License as published by the Free
+   Software Foundation, either version 3 of the License, or (at your option)
+   any later version.
+
+   pure-octave is distributed in the hope that it will be useful, but WITHOUT
+   ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+   FITNESS FOR A PARTICULAR PURPOSE.
+
+   Please see the accompanying COPYING file for the precise license terms. The
+   GPL are also be read online at http://www.gnu.org/licenses/. */
+
+using "lib:octave_embed";
+
+// Normally you don't have to call these directly.
+extern void octave_init(int argc, char **argv);
+extern void octave_fini();
+
+// Initialize Octave.
+octave_init 2 (byte_string_pointer ["octave","-q"]);
+
+// Execute an Octave command.
+extern int octave_eval(char *cmd);
+
+// Execute an Octave function.
+extern expr *octave_call(expr *fun, int nargout, expr *args);
+
+// Access to global Octave variables.
+extern expr *octave_get(char *id);
+extern expr *octave_set(char *id, expr *x);
+
+// Create an Octave function value.
+extern expr *octave_func(expr *fun);
+
+// Check for special Octave values (function pointers etc.).
+extern bool octave_valuep(expr *x);
+
+// Finalizer for special Octave values. You must not call this directly.
+extern void octave_free(void *val);

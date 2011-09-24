@@ -1,0 +1,16 @@
+sscanf "this" "%d";
+<stdin>, line 2: unhandled exception 'scanf_error ()' while evaluating 'sscanf "this" "%d"'
+sscanf "this" "%g";
+<stdin>, line 3: unhandled exception 'scanf_error ()' while evaluating 'sscanf "this" "%g"'
+sscanf "this" "%s";
+"this"
+sscanf "this" "%p";
+<stdin>, line 5: unhandled exception 'scanf_error ()' while evaluating 'sscanf "this" "%p"'
+sscanf "this" "this";
+()
+sscanf "this" "that";
+<stdin>, line 7: unhandled exception 'scanf_error ()' while evaluating 'sscanf "this" "that"'
+sscanf "this that" "this%n that%n";
+4,9
+sscanf "this that" "this%n%s%n";
+4,"that",9

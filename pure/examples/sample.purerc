@@ -1,0 +1,157 @@
+/* Pure interactive startup file. -*- Pure -*- */
+
+/* Example for the .purerc startup file which can be used to customize your
+   interactive Pure environment. Rename this to .purerc, edit as needed, and
+   put it into your home (or project) directory. See the Pure Manual for
+   details. */
+
+/* Since this is just an ordinary Pure script, interactive commands cannot be
+   run directly, but it's still possible to invoke them through 'evalcmd'.
+   You can also run shell commands with Pure's shell escape "! command". */
+
+//evalcmd "stats -m";
+//evalcmd "! fortune -s";
+//evalcmd "! echo \"Ready. Type 'help' for help.\"";
+
+// Maybe you want to load some additional non-prelude modules here.
+//using quasiquote;
+
+/* Add any other stuff that you use all the time, like your favourite macros,
+   constants, convenience functions, ... */
+
+// We redefine this below in the dec/hex/oct and std/sci/fix commands.
+public __show__;
+
+/* You can define your own interactive commands by placing corresponding
+   public function definitions in the __cmd__ namespace. See the "Interactive
+   Usage" section in the manual for details. */
+
+namespace __cmd__;
+
+/* These are just some (rather useless) examples for illustrative purposes,
+   which you may want to remove if you use this file as a template for your
+   own .purerc. */
+
+// An echo command.
+extern int puts(char*) = echo;
+// Always invoke 'ls' with '-l'.
+ls args = evalcmd $ "^ls -l "+args;
+
+/* An 'apropos' command. This is actually rather useful; it prints a quick
+   summary of the information available on a given symbol, as reported by the
+   'show' and 'help_index' commands. */
+
+apropos s = case catmap descr $ split "\n" $ evalcmd $ "show -s "+s of
+  [] = throw $ "undefined symbol '"+s+"'";
+  info = s+" is a "+join " and a " info+". \
+Type 'show "+s+"' for more information."+
+(if null (evalcmd $ "help_index "+s) then "" else
+"\nDocumentation for this symbol is available. Type 'help "+s+"'.");
+end with
+  descr info = case [x | x = split " " info; ~null x] of
+    t:c:_ = [symtypes!c] if s==t when
+      symtypes = {"fun"=>"function","mac"=>"macro","var"=>"variable",
+		  "cst"=>"constant"};
+    end;
+    _ = [];
+  end;
+end;
+
+/* Some private helper functions which are used below to manipulate the
+   definition of the __show__ function. */
+
+private find_rule del_rule repl_rule;
+
+// Find a rule with the given left-hand side.
+find_rule x = locate x $ get_fundef (headsym x) with
+  headsym (f@_ _) = headsym f; headsym x = x;
+  locate x (r@(x-->_):_) = r; locate x (_:xs) = locate x xs;
+  locate x _ = (); // not found
+end;
+
+// Delete a rule with the given left-hand side.
+del_rule x = case find_rule x of
+  r@(_-->_) = del_fundef r;
+  _ = ();
+end;
+
+// Replace a rule with the given left-hand side.
+repl_rule r@(x-->y) = del_rule x $$ add_fundef [r];
+
+/* We don't want to pull in the entire system module here, so we do our own
+   string formatting using stuff from the C library. */
+
+private extern int snprintf(void*, size_t, char*, ...);
+private extern int snprintf(void*, size_t, char*, int) = snprintf_int;
+private extern int snprintf(void*, size_t, char*, double) = snprintf_double;
+// This comes from the GMP library.
+private extern char *__gmpz_get_str(void *buf, int base, void *z) = mpz_get_str;
+
+private format hex_format oct_format;
+
+const hex_format = "0x%0x";
+const oct_format = "%#o";
+
+format fmt::string x::bigint = pref+buf+"L" when
+  base = if fmt==hex_format then 16 else if fmt==oct_format then 8 else 10;
+  pref = if fmt==hex_format then "0x" else if fmt==oct_format then "0" else "";
+  buf  = mpz_get_str NULL base x;
+end;
+
+format fmt::string x::int = cstring buf when
+  buf = malloc 100; snprintf_int buf 100 fmt x;
+end;
+
+format fmt::string x::double = cstring buf when
+  buf = malloc 100; snprintf_double buf 100 fmt x;
+end;
+
+/* Parse a precision argument. This is used in the number formatting commands
+   below. */
+
+private precstr;
+
+precstr default::int prec = format "%d" prec when
+  prec = case val prec of
+    p::int = p if p>=0 && p<=99; // valid range: 0..99
+    _ = default if null prec;
+      = throw $ "bad precision value '"+prec+"'";
+  end;
+end;
+
+/* Some convenient commands to switch number formats on the fly. These emulate
+   the corresponding commands of the Q interpreter, by manipulating the
+   definition of the __show__ function. The syntax for these commands is as
+   follows:
+
+   dec, hex, oct: Switch between decimal, hexadecimal and octal notations of
+   integers; 'dec' is the default of the interpreter. (These work with both
+   machine ints and bigints.)
+
+   std [prec], sci [prec], fix [prec]: Standard, scientific and fixed point
+   formatting of double values. The precedence is optional; it defaults to 2
+   for 'fix', and to 15 otherwise. Just 'std' resets to the interpreter's
+   default formatting.
+
+   Please note that currently these only affect the display of scalars;
+   pretty-printing of matrices is left as an exercise to the reader. */
+
+dec _ = do del_rule  $
+  '[__show__ (x __type__ int), __show__ (x __type__ bigint)];
+hex _ = do repl_rule $
+  '[(__show__ (x __type__ int) --> format hex_format x),
+    (__show__ (x __type__ bigint) --> format hex_format x)];
+oct _ = do repl_rule $
+  '[(__show__ (x __type__ int) --> format oct_format x),
+    (__show__ (x __type__ bigint) --> format oct_format x)];
+
+fix prec = repl_rule $ '(__show__ (x __type__ double) --> format fmt x)
+when fmt = "%#0."+precstr 2 prec+"f" end;
+sci prec = repl_rule $ '(__show__ (x __type__ double) --> format fmt x)
+when fmt = "%0."+precstr 15 prec+"e" end;
+std prec = del_rule $ '(__show__ (x __type__ double))
+  if precstr 15 prec == "15";
+= repl_rule $ '(__show__ (x __type__ double) --> format fmt x)
+when fmt = "%0."+precstr 15 prec+"g" end;
+
+namespace;

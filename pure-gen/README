@@ -1,0 +1,98 @@
+
+========
+pure-gen 
+========
+
+A Pure C bindings generator. Written by Albert Graef, based on Scott Dillard's
+original OpenGL bindings generator.
+
+License
+=======
+
+3-clause BSD, please check the COPYING file for detailed licensing
+information. The generator contains significant portions of the Language.C
+Haskell library; see dump-ast.hs for pertinent license and copyright
+information.
+
+Requirements
+============
+
+As of version 0.5, pure-gen is now compiled to a native executable. You'll
+need Pure 0.21 or later and the basic LLVM toolchain to make this work.
+
+pure-gen also requires gcc (-E) as its C preprocessor *at runtime*. Moreover,
+it needs a version of gcc which understands the -fdirectives-only option,
+which means gcc >= 4.3. It will run with older versions of gcc, but then
+you'll get an error message from gcc indicating that it doesn't understand the
+-fdirectives-only option. pure-gen then won't be able to extract any
+``#define``\ d constants from the header files.
+
+Thus, if you're still running an older version of gcc, you'll have to install
+gcc 4.3 or later in a location where it doesn't interfere with your system
+compiler. Then just set the PURECPP environment variable to the directory
+containing the gcc 4.3 binary and all should be fine.
+
+Installation
+============
+
+Normally you just run ``make && sudo make install``. This will install the
+program under $(prefix)/bin and the required dump-ast program under
+$(prefix)/lib/pure-gen. By default, pure-gen assumes the same installation
+prefix as the installed Pure interpreter. (See The Makefile for further
+options.)
+
+As already mentioned, to compile pure-gen.pure you'll need Pure 0.21 or later
+and the basic LLVM toolchain (llc+opt); see the Pure INSTALL file for details
+on how to get these up and running.
+
+Since pure-gen's C parser is written in Haskell, there are some notable
+additional requirements, explained in further detail below.
+
+Once you've run ``make`` successfully and the pure-gen and dump-ast programs
+have been built, you can also run a minimal testsuite with ``make check``. This
+only tests very basic functionality, but should be enough to make sure that
+pure-gen works on your system.
+
+Installing the Required Haskell Bits
+------------------------------------
+
+To build the C parser utility dump-ast, which is written in Haskell, you'll
+need a Haskell compiler (ghc 6 and 7 have been tested), as well as the
+Language.C Haskell library (version 0.4.2 or later). To compile Language.C,
+you'll also need the Haskell parser generator tools Alex and Happy.
+
+ghc can be found at http://www.haskell.org/ghc/. On many Linux systems, binary
+packages for ghc, alex and happy, as well as cabal (a Haskell library
+installation tool, see below) should be readily available.
+
+The Language.C library is most conveniently available through cabal
+(http://www.haskell.org/cabal/), see http://www.sivity.net/projects/language.c
+for more information. Once cabal is set up on your system, you can install
+Language.C by running ``cabal install language-c`` (make sure to do ``cabal
+update`` first so that you get the latest version).
+
+To make this a little easier for people not familiar with Haskell, we provide
+binaries of dump-ast for Linux and Windows, see README.dump-ast for details.
+
+Usage
+=====
+
+The pure-gen script generates bindings for C functions from a C header file.
+Try ``pure-gen -h`` for help. Basically, ::
+
+	pure-gen foo.h
+
+generates a Pure module foo.pure with ``extern`` declarations for the
+constants (``#define``\ s and enums) and C routines declared in the given C
+header file and (recursively) its includes. pure-gen also understands a bunch
+of options which control the contents of the generated modules in different
+ways.
+
+Complete documentation is available in the manual page. You can also read the
+manual online at:
+
+* http://pure-lang.googlecode.com/svn/docs/pure-gen.html (html version)
+* http://pure-lang.googlecode.com/svn/docs/pure-gen.pdf  (pdf version)
+
+| Albert Graef <Dr.Graef at t-online.de>
+| Scott Dillard

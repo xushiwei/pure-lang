@@ -1,0 +1,77 @@
+/*..
+	
+=================================== 
+Fast Fibonacci and Lucas Algorithms
+===================================
+	
+:Source:
+:http://code.google.com/p/pure-lang/source/browse/pure/examples/fibonacci.pure 
+:Author: Libor Spacek (C) <libors@gmail.com\> 
+:License: GPL V3
+:Date: March 2011
+	
+Example usage:
+> map fibonacci (-10..10);
+[-55L,34L,-21L,13L,-8L,5L,-3L,2L,-1L,1L,0L,1L,1L,2L,3L,5L,8L,13L,21L,34L,55L]
+> map fastfib (-10..10);
+[-55L,34L,-21L,13L,-8L,5L,-3L,2L,-1L,1L,0L,1L,1L,2L,3L,5L,8L,13L,21L,34L,55L]
+> map lucas (-10..10);
+[123L,-76L,47L,-29L,18L,-11L,7L,-4L,3L,-1L,2L,1L,3L,4L,7L,11L,18L,29L,47L,76L,123L]
+>stats on
+>(fib 987654321) $$ 0;
+68.11s
+>(fastfib 987654321) $$ 0;
+45.42s
+*/
+
+/* fib: computes two successive members F(n),F(n+1) of the
+   Fibonacci sequence (0,1,1,2,3,..), using the equivalences:
+   F(n+2)=F(n)+F(n+1), F(n-1)=F(n+1)-F(n),
+   F(2n)=F(n+1)^2-F(n-1)^2, F(2n+1)=F(n)^2+F(n+1)^2
+   computes three bigint squares for each bit of n  */
+
+fib 0 = 0L,1L; 
+fib 1 = 1L,1L;
+fib n::int = if n and 1
+	     then a2+b2,((\x::bigint -> x*x)(a+b))-a2 
+	     else b2-((\x::bigint -> x*x)(b-a)),a2+b2
+	     when a,b = fib (n>>1); a2 = a*a; b2 = b*b end;
+
+/* fibonacci: computes nth member of the Fibonacci sequence, using fib above.
+   Extended to negative arguments */
+
+fibonacci 0 = 0L;
+fibonacci n::int  = if (n and 1) then fib (pred (-n)) ! 1 
+		    else (-(fib (pred (-n)) ! 1)) if n<0; 
+		  = fib (pred n) ! 1;
+
+/* luc: L(n),L(n+1) terms of the Lucas sequence (2,1,3,4,..)
+   computes just two bigint squares for each bit of n 
+   L(n+1) is obtained from: L(n+2)-L(n), as bigint squares are
+   faster than comparable general products and the pure code is cleaner as well */
+
+luc 0 = 2L,1L; luc 1 = 1L,3L;
+luc n::int = if (1 and n) then b2-a2,b2 else a2,b2-a2 // n is odd,even
+     when 
+       sig = if (2 and n) then 2 else -2; //  n is odd,even multiple of 2
+       a,b = luc (n>>1); a2 = a*a+sig; b2 = b*b-sig // L(2n)=L(n)^2 -+2
+     end;
+
+// lucas: computes nth member of Lucas sequence using luc, extended to negative ns. 
+
+lucas 0 = 2L;
+lucas n::int 
+	= if (n and 1) then (-(luc (pred (-n)) ! 1)) 
+	  else luc (pred (-n)) ! 1 if n<0;
+	= luc (pred n) ! 1;
+ 
+/* fastfib: using F(2n) = L(n)*(2L(n-1)+L(n))/5 and 
+   F(2n+1) = (L(n)^2+L(n+1)^2)/5 
+   n.b. we call luc as it is faster than fib. */
+
+fastfib 0 = 0L; fastfib 1 = 1L;
+fastfib n::int  
+	= if (n and 1) then fastfib (-n) else (-(fastfib (-n))) if n<0;
+	= if (n and 1) then (a*a+b*b) div 5 
+	  else ( a*((z<<1)+a) div 5 when z = b-a end ) when a,b = luc (n>>1) end;
+
