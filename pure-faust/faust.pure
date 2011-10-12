@@ -1,0 +1,56 @@
+
+/* faust.pure: Load and run Faust signal processors in Pure. */
+
+/* Copyright (c) 2009-2011 by Albert Graef <Dr.Graef@t-online.de>.
+
+   pure-faust is free software: you can redistribute it and/or modify it under
+   the terms of the GNU Lesser General Public License as published by the Free
+   Software Foundation, either version 3 of the License, or (at your option)
+   any later version.
+
+   pure-faust is distributed in the hope that it will be useful, but WITHOUT
+   ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+   FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
+   License for more details.
+
+   You should have received a copy of the GNU Lesser General Public License
+   along with this program.  If not, see <http://www.gnu.org/licenses/>. */
+
+using "lib:faust";
+
+/* Declarations and convenience functions for control descriptions. As of
+   version 0.45 and later, Pure has a built-in internal Faust interface which
+   uses the same format of control descriptions as pure-faust, so the
+   following will work with both pure-faust and the internal interface. */
+
+using faustui;
+
+/* Initialize and finalize a Faust DSP object. */
+
+/* We employ some Pure wrappers here for finalization purposes, similar to
+   fopen/fclose in the system module. */
+
+namespace __C;
+extern faust_t *faust_init(char *name, int rate);
+extern faust_t *faust_clone(faust_t *fd);
+extern void faust_exit(faust_t *fd);
+namespace;
+
+extern void faust_reinit(faust_t *fd, int rate);
+
+faust_init name::string rate::int = sentry __C::faust_exit fd if ~null fd
+when fd = __C::faust_init name rate end;
+
+faust_clone fd::pointer = sentry __C::faust_exit fd if ~null fd
+when fd = __C::faust_clone fd end;
+
+faust_exit fd::pointer = clear_sentry fd $$ __C::faust_exit fd
+if get_sentry fd === __C::faust_exit;
+
+/* Compute a block of samples. */
+
+extern expr *faust_compute(faust_t *fd, expr *in, expr *out);
+
+/* Retrieve the DSP info. */
+
+extern expr *faust_info(faust_t *fd);
