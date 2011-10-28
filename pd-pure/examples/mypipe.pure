@@ -1,0 +1,27 @@
+
+/* pd-pure only allows you to schedule a single asynchronous event per call of
+   the object function (cf. mydelay.pure), but more elaborate facilities can
+   be built on top of this. The following example shows how to maintain a
+   timed message queue in a Pure list, in order to implement a simple delay
+   line similar to Pd's builtin 'pipe' object. */
+
+extern double pd_time();
+
+mypipe t = process (ref []) with
+  /* We use () to signal that the first message in the queue is to be
+     delivered. If the queue is then still nonempty, we also schedule a new ()
+     signal to arrive when the next message is due. */
+  process q () = case dequeue q of
+                   x,(t,_):_ = {x,pd_delay (t-pd_time) ()};
+                   x,_ = x;
+                 end;
+  /* Other messages are simply queued for delivery after the time interval
+     given by the creation argument t. If the queue was previously empty
+     (i.e., we're not waiting for a timer event yet), we also have to schedule
+     a () signal to be delivered when the first message is due. */
+  process q x  = enqueue q x $$ pd_delay t () if null (get q);
+               = enqueue q x $$ () otherwise;
+  /* Basic operations to enqueue and dequeue messages. */
+  enqueue q x  = put q $ get q+[(pd_time+t,x)];
+  dequeue q    = x,put q xs when (_,x):xs = get q end;
+end;

@@ -1,0 +1,184 @@
+.TH Pure 1 "February 2010" "Pure" "Pure Manual"
+.SH NAME
+pure \- the Pure interpreter
+.SH SYNOPSIS
+\fBpure\fP [\fIoptions\fP ...] [\fIscript\fP ...] [-- \fIargs\fP ...]
+.br
+\fBpure\fP [\fIoptions\fP ...] -x \fIscript\fP [\fIargs\fP ...]
+.SH OPTIONS
+.TP
+.B -c
+Batch compilation.
+.TP
+\fB--ctags\fP, \fB--etags\fP
+Create a tags file in ctags (vi) or etags (emacs) format.
+.TP
+.B --eager-jit
+Enable eager JIT compilation. This requires LLVM 2.7 or later, otherwise this
+flag will be ignored.
+.TP
+\fB-fPIC\fP, \fB-fpic\fP
+Create position-independent code (batch compilation).
+.TP
+.B -g
+Enable symbolic debugging.
+.TP
+\fB--help\fP, \fB-h\fP
+Print help message and exit.
+.TP
+.B -i
+Force interactive mode (read commands from stdin).
+.TP
+.BI -I directory
+Add a directory to be searched for included source scripts.
+.TP
+.BI -L directory
+Add a directory to be searched for dynamic libraries.
+.TP
+.BI -l libname
+Library to be linked in batch compilation.
+.TP
+.B --noediting
+Disable command-line editing.
+.TP
+\fB--noprelude\fP, \fB-n\fP
+Do not load the prelude.
+.TP
+.B --norc
+Do not run the interactive startup files.
+.TP
+.BI -o filename
+Output filename for batch compilation.
+.TP
+.B -q
+Quiet startup (suppresses sign-on message in interactive mode).
+.TP
+.BI -T filename
+Tags file to be written by --ctags or --etags.
+.TP
+.B -u
+Do not strip unused functions in batch compilation.
+.TP
+.BR -v [\fIlevel\fP]
+Set verbosity level.
+.TP
+.B --version
+Print version information and exit.
+.TP
+.B -w
+Enable compiler warnings about various dubious constructs and backward
+compatibility issues.
+.TP
+.B -x
+Execute script with given command line arguments.
+.TP
+.B --
+Stop option processing and pass the remaining command line arguments in the
+.B argv
+variable.
+.SH DESCRIPTION
+Pure is a modern-style functional programming language based on term
+rewriting. Pure programs are basically collections of equational rules used to
+evaluate expressions in a symbolic fashion by reducing them to normal form.
+.PP
+.B pure
+is the Pure interpreter. The interpreter has an LLVM backend which
+JIT-compiles Pure programs to machine code, hence programs run blazingly fast
+and interfacing to C modules is easy, while the interpreter still provides a
+convenient, fully interactive environment for running Pure scripts and
+evaluating expressions.
+.PP
+Basically, to run a Pure script with the interpreter, just specifiy the
+filename of the script on the command line. You can also invoke the
+interpreter without arguments, in which case it starts up in interactive mode.
+Or you can compile a script to a native executable (as well as a number of
+other recognized LLVM and native code formats) with the
+.B -c
+option (use
+.B -o
+to specify the output filename); this requires that you have some parts of the
+LLVM toolchain (llc, opt) as well as gcc installed. Last but not least, you
+can create a tags file for use with
+.BR emacs (1)
+or
+.BR vi (1)
+with the
+.B --etags
+and
+.B --ctags
+options.
+.PP
+The full version of this manual can be read inside the interpreter, by typing
+.B help
+on the interpreter's command line. This requires
+.BR w3m (1)
+to work. (You can also set the name of another html browser to use with the
+.B PURE_HELP
+or the
+.B BROWSER
+environment variable.)
+.SH FILES
+.TP
+.B a.out
+Default output filename for batch compilation (-c).
+.TP
+.B ~/.pure_history
+Interactive command history.
+.TP
+\fB~/.purerc\fP, \fB.purerc\fP, \fB.pure\fP
+Interactive startup files. The latter is usually a dump from a previous
+interactive session.
+.TP
+.B prelude.pure
+Standard prelude. If available, this script is loaded before any other
+definitions, unless
+.B -n
+was specified.
+.SH ENVIRONMENT
+.TP
+.B BROWSER
+If the
+.B PURE_HELP
+variable is not set (see below), this specifies a colon-separated list of
+browsers to try for reading the online documentation. See
+\fIhttp://www.catb.org/~esr/BROWSER/\fP.
+.TP
+.B PURELIB
+Directory to search for library scripts, including the prelude. If
+.B PURELIB
+is not set, it defaults to some location specified at installation time.
+.TP
+.B PURE_EAGER_JIT
+Enable eager JIT compilation (same as \fB--eager-jit\fP).
+.TP
+.B PURE_HELP
+Browser to use to read online documentation in the interpreter. By default,
+.BR w3m (1)
+is used.
+.TP
+.B PURE_INCLUDE
+Additional directories (in colon-separated format) to be searched for included
+scripts.
+.TP
+.B PURE_LIBRARY
+Additional directories (in colon-separated format) to be searched for dynamic
+libraries.
+.TP
+.B PURE_MORE
+Shell command to be used for paging through output of the
+.B show
+command, when the interpreter runs in interactive mode.
+.TP
+.B PURE_PS
+Command prompt used in the interactive command loop (">\ " by default).
+.TP
+.B PURE_STACK
+Maximum stack size in kilobytes (default: 0 = unlimited).
+.SH LICENSE
+LGPL V3 or later. See the accompanying COPYING file for details.
+.SH AUTHOR
+Albert Graef <Dr.Graef@t-online.de>, Dept. of Computer Music, Johannes
+Gutenberg University of Mainz, Germany.
+.SH SEE ALSO
+You can find the latest releases and the mailing list at the Pure website,
+\fIhttp://pure-lang.googlecode.com\fP.

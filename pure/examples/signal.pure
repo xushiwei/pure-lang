@@ -1,0 +1,27 @@
+
+/* Signal processing example. */
+
+using system;
+extern int getpid();
+
+/* Rebind some common POSIX signals to Pure exceptions. Note that, for
+   convenience, most of these are also remapped automatically by the
+   interpreter when it starts in interactive mode. (Try 'show -g SIG*' to see
+   which standard signal values are known on your system.) */
+
+do (trap SIG_TRAP)
+[SIGHUP, SIGINT, SIGALRM, SIGTERM, SIGTSTP, SIGUSR1, SIGUSR2];
+
+/* Running this function enters an endless loop reporting all signals
+   delivered to the process. */
+
+test = printf "Running as pid %d, try to kill me!\n" getpid $$ loop;
+
+loop = catch sig proc $$ loop with
+  sig (signal k) = printf "Hey, I got signal %d.\n" k;
+end;
+
+/* Take a short nap so that the loop doesn't run busily. In production code we
+   would do some real processing here. */
+
+proc = sleep 1;
