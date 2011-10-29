@@ -1,0 +1,69 @@
+// Read and write blobs of different host architectures (Pure 0.28+).
+
+/* If you can contribute blobs for systems not yet covered here, please send
+   them to Dr.Graef (at) t-online.de, or post them on the Pure mailing
+   list. (To create a blob file, just run the 'write_test' function below with
+   a filename identifying your system as argument.) Thanks! :) */
+
+using system;
+
+// Write a blob to a file. Here the blob will always use the data
+// representation of the host architecture, so actual results may vary.
+
+write_test fname::string = () when
+  fp::pointer = fopen fname "w";
+  X = {1,2,3;4,5,6};
+  b = blob [("Hello, world!",x+y,1/2,4711,-4711L,NULL),
+	    ["Hello, world!",x+y,1/2,4711,-4711L,NULL],
+	    {"Hello, world!",x+y,1/2,4711,-4711L,NULL},
+	    X, dmatrix X, cmatrix X];
+  printf "writing blob file: %s\n" fname;
+  printf "blob size: %d bytes\n" (#b);
+  printf "wrote %d bytes\n" $ int $ fwrite b 1 (#b) fp;
+end;
+
+// Read a blob from a file. Here the blob will be translated to the data
+// representation of the host architecture on the fly.
+
+/* 'make check' runs this from the parent directory, so we use the test subdir
+   of the source directory if the corresponding environment variable is
+   defined. */
+
+extern char *getenv(char*);
+let srcdir = if stringp srcdir then srcdir+"/test/" else ""
+  when srcdir = getenv "srcdir" end;
+
+read_test fname::string = do (puts.str) (val b) when
+  name = srcdir+fname; fp::pointer = fopen name "r";
+  n::bigint = stat name!7; b::pointer = cooked $ malloc n;
+  printf "reading blob file: %s\n" fname;
+  printf "read %d bytes\n" $ int $ fread b 1 n fp;
+  if blobp b then printf "blob size: %d bytes\n" (#b)
+  else throw "invalid blob!";
+end;
+
+/* Here are the tests that we already have. If everything goes smoothly, each
+   test should produce output similar to the following (taking 64 bit Linux as
+   an example):
+
+   > read_test "amd64-linux64.blob";
+   reading blob file: amd64-linux64.blob
+   read 898 bytes
+   blob size: 898 bytes
+   "Hello, world!",x+y,0.5,4711,-4711L,#<pointer 0>
+   ["Hello, world!",x+y,0.5,4711,-4711L,#<pointer 0>]
+   {"Hello, world!",x+y,0.5,4711,-4711L,#<pointer 0>}
+   {1,2,3;4,5,6}
+   {1.0,2.0,3.0;4.0,5.0,6.0}
+   {1.0+:0.0,2.0+:0.0,3.0+:0.0;4.0+:0.0,5.0+:0.0,6.0+:0.0}
+   ()
+
+   If you get an error message or an exception instead, then please report
+   these via the Pure mailing list or the Pure issue tracker at
+   http://pure-lang.googlecode.com/, mentioning the hardware and system
+   configuration that you have, so that can weed out the bugs. */
+
+read_test "amd64-linux64.blob";
+read_test "amd64-linux32.blob";
+read_test "amd64-win32.blob";
+read_test "ppc32-linux32.blob";

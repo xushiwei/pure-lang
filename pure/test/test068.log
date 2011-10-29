@@ -1,0 +1,102 @@
+foo x/*0:1*/::int = x/*0:1*/+1;
+{
+  rule #0: foo x::int = x+1
+  state 0: #0
+	<var>::int state 1
+  state 1: #0
+}
+foo 99;
+100
+foo 99.0;
+<stdin>, line 8: unhandled exception 'failed_match' while evaluating 'foo 99.0'
+evalcmd "clear foo";
+""
+foo 99;
+foo 99
+foo 99.0;
+foo 99.0
+foo x/*0:1*/::int = x/*0:1*/+1;
+{
+  rule #0: foo x::int = x+1
+  state 0: #0
+	<var>::int state 1
+  state 1: #0
+}
+foo 99;
+100
+foo 99.0;
+<stdin>, line 12: unhandled exception 'failed_match' while evaluating 'foo 99.0'
+{
+  rule #0: foo x::int = x+1
+  state 0: #0
+	<var>::int state 1
+  state 1: #0
+}
+foo 99;
+100
+foo 99.0;
+foo 99.0
+myputs x/*0:1*/ = case puts x/*0:1*/ of x/*0:*/::int = 0 if x/*0:*/>=0; _/*0:*/ = x/*1:1*/ {
+  rule #0: x::int = 0 if x>=0
+  rule #1: _ = x
+  state 0: #0 #1
+	<var> state 1
+	<var>::int state 2
+  state 1: #1
+  state 2: #0 #1
+} end;
+puts x/*0:1*/::int = puts (str x/*0:1*/);
+{
+  rule #0: puts x::int = puts (str x)
+  state 0: #0
+	<var>::int state 1
+  state 1: #0
+}
+{
+  rule #0: myputs x = case puts x of x::int = 0 if x>=0; _ = x end
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+99
+myputs 99;
+0
+myputs 99.0;
+<stdin>, line 26: unhandled exception 'failed_match' while evaluating 'myputs 99.0'
+evalcmd "clear puts";
+""
+myputs 99;
+<stdin>, line 28: unhandled exception 'failed_match' while evaluating 'myputs 99'
+myputs 99.0;
+<stdin>, line 28: unhandled exception 'failed_match' while evaluating 'myputs 99.0'
+myputs 99;
+99
+myputs 99.0;
+99.0
+puts x/*0:1*/::int = puts (str x/*0:1*/);
+{
+  rule #0: puts x::int = puts (str x)
+  state 0: #0
+	<var>::int state 1
+  state 1: #0
+}
+99
+myputs 99;
+0
+myputs 99.0;
+99.0
+{
+  rule #0: puts x::int = puts (str x)
+  state 0: #0
+	<var>::int state 1
+  state 1: #0
+}
+evalcmd "clear puts";
+""
+myputs 99;
+<stdin>, line 35: unhandled exception 'failed_match' while evaluating 'myputs 99'
+myputs 99.0;
+<stdin>, line 35: unhandled exception 'failed_match' while evaluating 'myputs 99.0'
+foo
+myputs "foo";
+0
