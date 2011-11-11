@@ -1,0 +1,331 @@
+
+--- DRAFT - FOR DISCUSSION PURPOSES ONLY ---
+
+
+A. General
+
+1. This is *NOT* ready for public consumption!
+
+2. The pure-stlmap package provides a Pure interface to the STL's four "sorted
+   associative" containers: map, set, multimap and multiset. The corresponding
+   Pure containers are stlmap, stlset, stlmmap and stlmset. The stlmap and
+   stlmmap containers, sometimes referred to simply as "maps", hold keys,
+   each of which has an associated value that can be set or retrieved based on
+   key. The key value pairs in a Pure map or is referred to as an elements or
+   members of the map. If v is the value associate with key k, the
+   corresponding element of the map is denoted by (k=>v). The stlset and
+   stlmset containers, referred to as "sets", contain only keys with
+   no associated values. In this case, the keys themselves are referred to as
+   the elements or members of the pure-stl set.
+
+3. All four of containers are mutable; no immutable versions are provided by
+   pure-stlmap. All of the containers are implemented with balanced binary
+   trees which allow for O(log N) time for storage and retrieval.
+
+4. Keys stored in a stlmap or stlset are unique while stlmmaps and stlmset can
+   store multiple keys with the same value. Contrary to C++'s insert
+   functions, pure-stlmap's insert functions insert new values into stlmaps
+   even if an element with the same key is already stored in the stlmap.
+
+5. All of the sorted associative containers keep their keys in sorted order
+   imposed by a "less than function" that is stored in the container. By
+   default the less than function is (<), but customized less than functions
+   can be specified when a container is created. 
+
+   The ordering imposed on a sorted associative container's elements makes it
+   possible to designate well defined "ranges" of elements, using "iterator
+   tuples". For these purposes an iterator can be thought of as a pointer to
+   an element in the container.
+
+   The iterator tuples for the sorted associative containers always specify
+   ranges. They have three elements: (sac, lb_key, ub_key) where sac a stlmap,
+   stlset, stlmmap or stlmset, lb_key is a key designating the lower bound of
+   the range and ub_key is a key designating the upper bound of the range. The
+   designated range is an ordered subsequence of elements of sac beginning with
+   the first element whose key is not less than lb_key and all succeeding
+   elements that are less than ub_key.
+   
+   Thus, if sm1 is the stlmmap consisting of ["b"=>1,"b"=>2,"c"=>3","d"=>4]
+   then (Sam1,"b","d") is ["b"=>1,"b"=>2,"c"=>3], (Sm1,"a","c") is
+   ["b"=>1,"b"=>2] and (sm1,"c","x") is ["c"=>3].
+
+   When specifying a range of a sorted associative container provided by
+   pure-stump, the constant stl::stlbeg denotes the first element in the
+   container and the constant stl::stlend denotes a value that is greater than
+   any of the containers elements. In terms of C++ iterators, stalker and
+   stlend correspond to sac.begin() and sac.end() where sac is the STL
+   container wrapped by the Pure container. Thus, if ss1 is the stlmset
+   consisting of ["b","b","c","d"], (ss1,"c",stlend) is the range ["c","d"].
+
+   Finally, if a function calls for a range as a parameter, the function can
+   be passed an iterator tuple consisting of less than three elements.  A
+   tuple with two elements, (mp,k), denotes the range consisting of all
+   elements with key equal to k.  A tuple with one element mp will be treated
+   the same as (mp, stl::stlbeg, stl::stlend).
+
+6. Note that ranges defined on stlmmaps and stlmsets are based solely on
+   keys. It is not possible define a range in terms of a key-value
+   combinations. This follows from the fact that in pure-stlmap, elements and
+   ranges are always specified by key, not by individual elements. 
+
+   For example, let mmp be a stlmmap that consists of
+   ["a"=>1,"a"=>2,"a"=>2,"a"=>3,"a"=>3]. In C++ where ranges are easily
+   defined based on individual elements, one could define a range in mmp
+   consisting of ["a"=>2,"a"=>3,"a"=>3]. In pure-stlmap, this is not possible:
+   if you have one element with key "a", you must have all of them. I.e.,
+   (mmp,"a","b") consists of ["a"=>1,"a"=>2,"a"=>2,"a"=>3,"a"=>3],
+   (ss1,"a","a") is empty.
+
+   This presents a design issue in the case of stlmmaps, in which keys are not
+   necessarily unique. If several elements in a stlmmap have the same key, how
+   does one refer to a particular instance of them? One might want to delete
+   all elements with key "a", all elements with key "a" and value 2, or just
+   one element with key "a" and value 2.
+
+   pure-stlmap deals with this issue by providing functions that update or
+   erase elements in ranges based on a function passed as one of the
+   parameters. For example following would erase all elements of mmp with 
+   key "a" and value equal to 2:
+
+      my_equal x (_=>v) = v==x;
+      erase_if (my_equal 2) (mmp,"a")
+
+   More precisely, this erases all elements in the range consisting of
+   elements with key of "a" and value that satisfies (value_equal 2). A
+   slightly more elaborate function be can used to erase at most one element
+   of mmp with key "a" and value 2:
+
+      let erased = ref 0;
+      my_equal_once x (_=>v) = if ~get erased && v==x then put erased 1 else 0;
+      erase_if (my_equal_once 2) (mmp,"a")
+
+8. See stlmap.pure and stlmmap for functions provided. Most are just what one
+   might expect for a container that holds an ordered sequence of elements.
+
+B. Notable features
+
+1. By default, stlsets and stlmaps are constructed with (<) as the ordering
+   function. Other ordering functions can be used if desired.
+
+2. The ! operator
+
+   a. If ss is a stlset or stlmset, ss!k returns the number of elements equal
+      to k. Thus, if k is not an element of ss, ss!k is 0.
+
+   b. If sm is a stlmap, sm!k returns v if k is stored in sm. If k is not
+      stored in sm, sm!k returns sm's default value, if any, or throws an
+      out_of_bounds exception. (see 3 for notes on default values).
+
+   c.  If smm is a stlmmap, smm!k smm!k returns a list of consisting of all v
+       where (k=>v) is an element of smm, provided that at least one k is
+       stored in smm. Otherwise sm!k returns sm's default value, if any, or
+       throws an out_of_bounds exception. (see 3 for notes on default values).
+
+3. A all four of the SAC's can be given a default value (al la C++ T()). It
+   affects the ! operator only in the case of a stlmap. For stlmaps, the
+   default value can be used to signal that the designated key was not 
+   stored in the map.
+
+         let x = mp!k;
+         if x == nothing then ... else ...
+
+   a. If sac is a stlmap, (sac!k) will throw out_of_bounds if k is not stored
+      in mp. However, if the map or set has a default value this will be
+      returned without k being stored in the map or set.
+
+   b. If sac is stlmmap (sac!k) will return a list containing all elements in
+      sac with key k, or [] is k is not stored in the stlmap. The default
+      value is not used by the ! operator.
+
+   c. If sac is a stlmset (sac!k) will the number of elements in the stlmset
+      key k, or 0 is k is not stored in the stlmap. The default value
+      is not used by the ! operator.
+
+   d. If sac is a stlset (sac!k) returns 1 if k is stored in the stlset and 0
+      if it is not.
+
+4. Key value pairs can be updated using "update mp k v", "update_with f
+   sm k" or update_vals smm k vals, where mp is a stlmmap or stlmap, sm is a
+   stlmap, smm is a stlmmap, k is key, v is value, f is a unary function that
+   maps old values (re default values) to new values, and vals is a list,
+   vector or stlvec of vals.
+
+   a. "update mp key val" changes the val of the first element (k=>v) of mp
+      where k==key (if it exists) to val. If key is not already stored in mp,
+      (key=val) is added to the map. Returns the mp.
+
+   b. "update_with unary_fun sm key" only applies to stlmaps that have default
+      values. If key is stored in the stlmap, its value is changed the
+      (unary_fun v). If key is not already stored in sm then (key=>unary_fun
+      dv) is added to sm where dv is the stlmap's default value.
+      
+      "update_with" provides precise control over the modification of key
+      value pairs in a stlmap. E.g., if map is a stlmmap, the first element
+      with (k=>v) where k == "a" and (pred v) is true can be changed to
+      (k=>new v).
+
+         selective_update (_=>v) = if (pred v) then (new v) else v;
+         update_with selective_update map "a;
+
+      "update_with" is also useful for associating a count or lists of objects
+      with a given key. E.g., 
+
+        let word_counts = emptystlmap;
+        set_default word_counts 0;
+        bump_count w = update_with ((\_=>v)->v+1) word_counts w; 
+        do bump_count word_list;
+
+        sort_str w = strcat $ sort (<) (chars w);
+        let anagrams = emptystlmap;
+        set_default anagrams [];
+        push_word w = update_with (\(_=>v)->w:v) anagrams (sort_str w);
+        do push_word word_list;
+
+     The unary function can set variables (using ref, get, put) to indicate
+     the what it encountered and how it dealt with it.
+
+     FIX - let update_with act of stlmmaps? It could transform all elements
+     with the given key, one by one.
+
+   c. "update_vals smm k vals applies only to stlmmaps. The effect of this
+       function is to erase vals with key k and insert (map (\v->k=>v) vals)
+       into smm. For effiency, wherever possible the values of existing
+       elements with key k are simply replaced by new values.
+
+5. Set operators are provided for all four of the sorted associative
+   containers. 
+
+   a. The operators are: "+", "-", "*", "/". These are implemented the same as
+      for dict and set in the Pure standard library except that for stlmmaps,
+      there is no guaranteed order of elements with the same key the appear in
+      the result. In tests so far the order of such elements has been the same
+      -- first inserted, first. Apparently in C++11, For multiset and
+      multimap, insert and erase preserve the relative ordering of equivalent
+      elements. If a range containing elements equivalent to t exists in a_eq,
+      t is inserted at the end of that range. This is not guaranteed by
+      c++03. The STL set operatons assume that the stlmmaps are ordered, even
+      among elements with the same key.
+
+   b. The five STL set operatons, stl::set_union, stl::set_difference,
+      stl::set_intersection, stl::set_symmetric_difference and stl::include
+      are also available. Note that these operations only work if the elements
+      of the containers are ordered. This requires care in the case of
+      stlmmaps and stlmsets. For stlmaps and stlsets, the key comparator is
+      all that is used. For stlmmaps both the key comparator and the value
+      comparator are used.
+
+      FIX Add merge. This would be set sum. Considert a sort function
+      for ranges of stl
+
+   b. Both operands must be the same type of container. I.e., sm1 + sm2, where
+      sm1 and sm2 are stlmaps, but no sm1 + smm1, where smm1 is a stlmmap.
+ 
+   c. The operations act on ranges, so it is possible to work with container
+      subsequences.
+
+   d. In the case of sm1 + sm2, where sm1 and sm2 are stlmaps, elements from
+      both maps can end up in the result. Because the result will be a stlmap,
+      there can only be one element associated with each key. If sm1 has an
+      element (k=>v1) and sm2 has an element (k=>v2), the resulting stlmap
+      will contain (k=>v2). This is the opposite of what would happen if
+      C++'s set_union function were used. Similarly for set intersection. 
+
+   e. In the case of smm1 + smm2, where smm1 and smm2 are stlmmaps, all of the
+      elements from both smm1 and smm2 are included in the resulting
+      stlmmap. The same is true for sms1 + sms2 where sms1 and sms2 are
+      stlmsets. For this reason, some people would refer to the + operator as
+      a multiset sum operator as opposed to mulitset union operator. They
+      would reserve the latter term for an operation that would limit
+      duplicates to the number of the duplicate items appear in smm1 or or in
+      smm2, which ever is greater. Note that the C++ set_union function builds
+      a multi_set union, not a mulitiset sum. Similarly for set intersection.
+
+6. Elements in a range can be deleted using "erase" and "erase_if".
+
+   a. erase (sac,k1,k2) deletes all elements in the indicated range.
+
+   b. erase_if pred (sac,k1,k2) deletes all elements in the indicated range
+      that satisfy pred. For stlmap and stlmmap pred should take (k=>v) as
+      its parameter. 
+
+   c. The erase functions return the number of elements deleted (which
+      can be 0).
+
+7. Individual elements can be erased using the delete functions.
+
+   a. "delete sac k removes the first element in sac with key k, if any.
+
+   b. "delete_all sac k removes all elements in sac with key k.
+
+   c. "delete_if pred sac k removes the first element in 
+      sac with key k that satifies pred, if any. If sac is a stlmap or
+      stlmmap, the elements passed to pred will be of the form (k=>v).
+
+   d. "delete_val mp (k=>v) removes the first element in mp with key k and
+      value v, if any. mp must be a stlmap or stlmmap; the function fails
+      if mp is a stlset or stlmset.
+
+8. For any sorted associative container, sac, "next_key sac k)" and "prev_key
+   sac k) generally do just what their names suggests. The behavior for the
+   "corner cases" is as follows: 
+
+       a. If k is the last key in sac "next_key sac k)" returns stl::stlend.
+
+       b. If k is the past end iterator, next_key throws an out_of_bounds
+          exception, and prev_key returns the key of the last element in sac.
+
+       c. If k is the first key in sac, "prev_key" throws out_of_bounds
+          exception.
+
+       d. If k is the second key in sac, prev_key returns stl::stlbeg, rather
+          than the actual first k in sac.
+
+9. Each sac has three functions used that define how it operates: key_less
+   function, a val_less, val_equal function.
+
+   a. Keys are ordered by key_less. Default is (<).
+
+   b. val_less is to order elements in a stlmmap when order is
+      important. I.e., less, merge, and the set operations. (These operations
+      use key_less for stlmap, stlset and stlmset.) Default is (<). The
+      default gives the same results as calling these functions in C++ 
+      without a specific comp function.
+
+   c. val_equal is only for equal (==). For this function, two elements
+      (k1=>v1) == (k2=v2) iff ~key_less k1 k2 && ~key_less k2 k1 && val_equal
+      v1 v2.
+
+   d. Currently, although val_less is never used by stlmap, stlset, stlmset. It
+      is still required by emptystlmap_with, ..
+
+C. Cached iterators
+
+1. The last C++ iterator used in selected operations is cached. Only one
+   iterator is cached at any one time. Operations that invalidate the cached
+   iterator cause the iterator to be removed from the cache.
+
+2. The following operations cause an iterator to be cached:
+
+   FIX
+
+3. The following operations cause an iterator to be deleted from the cache:
+
+   FIX
+
+4 In certain commonly occurring sequences caching can eliminate an O(log N)
+  lookup. E.g., "member sd k" followed by "sd!k" or "update sd k v" only
+  requires only one lookup. Caching also allows efficient traversal of the
+  elements in sd using "next sd k" and "prev sd k".
+
+D. Examples/Testing
+
+1. To run the example/test script for stlmaps:
+
+     $> pure -q -w
+     > run check_eval.pure 
+     > check "ut_script_stlmap.pure";
+
+2. The target scripts for stlmmap, stlset, stlmset have similar names.
+
+3. More testing needs to be done.
+

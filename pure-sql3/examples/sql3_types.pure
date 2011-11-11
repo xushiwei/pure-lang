@@ -1,0 +1,76 @@
+/* sql3_types.pure Mar 18, 2010 */
+
+using sql3;
+
+private x_expr;
+
+putrows rows = puts "------" $$ do (puts . str) rows;
+x2b x = int (#b), b when b::pointer = blob x end;
+blob2expr (n::int,b::pointer) = val b;
+
+setup db = () 
+when
+  puts "Begin setup";
+
+  //The table TC has one column for each type
+  sql_create =    
+    "create table TC (" +
+    "b_blob blob, " +
+    "c_chars varchar, " + 
+    "d_double double, " + 
+    "i_int integer, " +
+    "k_key integer primary key, " +
+    "l_int64 integer, " +
+    "x_binary_expr blob) ";
+
+  sql3::exec db "drop table if exists TC";
+  sql3::exec db sql_create;
+
+  puts "End setup";
+end;
+
+bind_select_types db = ()
+when 
+  puts "begin bind_select_types";
+
+  //Insert some data
+  stm1 = sql3::prep db "bcdiklx" "insert into TC values(?,?,?,?,?,?,?)";
+  typep sql3::stmt_ptr stm1 || puts "sql3::stmt_ptr typep error";
+
+  two40 = pow 2 40;
+  sql3::exec stm1 [x2b "Blob A","Manny", 120.0, 1, 100, 12L, x_expr];
+  sql3::exec stm1 [x2b "Blob B","Moe",  150.0, 2, 200L, 13L, [1,2,3]];
+  sql3::exec stm1 [x2b "Blob C","Jack", 160.0, 3, two40,14L, ("a",5.0)];
+
+  //Query each column of a table that has one column per Sql3 type
+  stm1 = sql3::prep db "b:" "select b_blob from TC";
+  do (puts.str.(map blob2expr)) (sql3::exec stm1 ());
+  stm1 = sql3::prep db "c:" "select c_chars from TC";
+  putrows (sql3::exec stm1 ());
+  stm1 = sql3::prep db "d:" "select d_double  from TC";
+  putrows (sql3::exec stm1 ());
+  stm1 = sql3::prep db "i:" "select i_int from TC";
+  putrows (sql3::exec stm1 ());
+  stm1 = sql3::prep db "k:" "select k_key from TC";
+  putrows (sql3::exec stm1 ());
+  stm1 = sql3::prep db "l:" "select l_int64 from TC";
+  putrows (sql3::exec stm1 ());  
+  stm1 = sql3::prep db "x:" "select x_binary_expr from TC";
+  putrows (sql3::exec stm1 ());
+
+  puts "End bind_select_types";
+end;
+
+main = ()
+when
+  db = sql3::open "abc.db";
+  typep sql3::db_ptr db || puts "sql3::db_ptr typep error";
+  sql3::begin db;
+  setup db;
+  bind_select_types db;
+  sql3::commit db;
+end;
+
+// Run this:
+main;
+
