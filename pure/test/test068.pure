@@ -1,0 +1,36 @@
+
+// Test dynamic behaviour of --defined/--nodefined pragmas and 'clear'.
+
+// Ordinary function.
+
+#! --defined foo
+foo x::int = x+1;
+foo 99; foo 99.0;
+evalcmd "clear foo";
+foo 99; foo 99.0;
+foo x::int = x+1;
+foo 99; foo 99.0;
+#! --nodefined foo
+foo 99; foo 99.0;
+
+// External with and without Pure equations.
+
+// Wrap up puts calls for Windows compatibility, where puts is only guaranteed
+// to return a nonnegative value on success, so we just make it always return
+// 0 in these cases.
+extern int puts(char*);
+myputs x = case puts x of x::int = 0 if x>=0; _ = x otherwise end;
+
+#! --defined puts
+puts x::int = puts $ str x;
+myputs 99; myputs 99.0;
+evalcmd "clear puts";
+myputs 99; myputs 99.0;
+#! --nodefined puts
+myputs 99; myputs 99.0;
+puts x::int = puts $ str x;
+myputs 99; myputs 99.0;
+#! --defined puts
+evalcmd "clear puts";
+myputs 99; myputs 99.0;
+myputs "foo";
