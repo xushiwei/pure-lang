@@ -1,0 +1,207 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include <pure/runtime.h>
+
+/* Some of this is cribbed from Sven Panne's excellent Haskell OpenGL
+   bindings. */
+
+/*
+Copyright (c) 2009, Scott E Dillard
+Copyright (c) 2002-2005, Sven Panne
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice,
+   this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+
+3. Neither the name of the author nor the names of its contributors may be
+   used to endorse or promote products derived from this software without
+   specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+*/
+
+#ifndef _WIN32
+#define APIENTRY 
+#endif
+
+#if defined(_WIN32) /* Windows */
+#include <windows.h>
+#include <GL/gl.h>
+#include <GL/glu.h>
+#include <GL/glut.h>
+
+static void*
+get_proc_addr(const char *name)
+{
+  static int firstTime = 1;
+  static HINSTANCE gl32 = 0, glu32 = 0, glut = 0;
+  void *p;
+  if (firstTime) {
+    gl32 = LoadLibrary("opengl32.dll");
+    glu32 = LoadLibrary("glu32.dll");
+    glut = LoadLibrary("freeglut.dll");
+    firstTime = 0;
+  }
+  (void)
+    ((p = wglGetProcAddress(name)) ||
+     (p = GetProcAddress(gl32, name)) ||
+     (p = GetProcAddress(glu32, name)) ||
+     (p = GetProcAddress(glut, name)));
+  return p;
+}
+
+#elif defined(__APPLE__) /* Mac */
+#include <OpenGL/gl.h>
+#include <OpenGL/glu.h>
+#include <GLUT/glut.h>
+#include <mach-o/dyld.h>
+
+/* APIENTRY is undefined after inclusion of stock glut.h on OSX, as reported
+   by autotelicum. So define it as empty once again. */
+
+#define APIENTRY 
+
+static void*
+get_proc_addr(const char *name)
+{
+  NSSymbol symbol;
+
+  /* Prepend a '_' for the Unix C symbol mangling convention */
+  char* symbolName = (char*)malloc(strlen(name) + 2);
+  if (!symbolName) {
+    fprintf(stderr, "Failed to allocate memory for NSGLGetProcAddress\n");
+    return NULL;
+  }
+  symbolName[0] = '_';
+  strcpy(symbolName + 1, name);
+
+  if (!NSIsSymbolNameDefined(symbolName)) {
+    free(symbolName);
+    return NULL;
+  }
+
+  symbol = NSLookupAndBindSymbol(symbolName);
+  free(symbolName);
+  if (!symbol) {
+    return NULL;
+  }
+
+  return NSAddressOfSymbol(symbol);
+}
+
+/* ToDo: This should really be based on a feature test. */
+#elif defined(__sgi) || defined (__sun)
+#include <GL/gl.h>
+#include <GL/glu.h>
+#include <GL/glut.h>
+#include <dlfcn.h>
+
+static const char* gpaNames[] = {
+  "glXGetProcAddress", "glXGetProcAddressARB", "glXGetProcAddressEXT",
+  "_glXGetProcAddress", "_glXGetProcAddressARB", "_glXGetProcAddressEXT"
+};
+
+static void*
+get_proc_addr(const char *name)
+{
+  static int firstTime = 1;
+  static void *handle = NULL;
+  static void *gpa = NULL;
+
+  if (firstTime) {
+    firstTime = 0;
+
+    /* Get a handle for our executable. */
+    handle = dlopen(NULL, RTLD_LAZY);
+    /* If fail this early, there's not much we can do about it. */
+    if (!handle) {
+      return NULL;
+    }
+
+    {
+      /* Let's see if our platform supports a glXGetProcAddress() variant. */
+      int numNames = (int)(sizeof(gpaNames) / sizeof(gpaNames[0]));
+      int i;
+      for (i = 0;   (!gpa) && (i < numNames);   ++i) {
+        gpa = dlsym(handle, gpaNames[i]);
+      }
+    }
+  }
+
+  if (gpa) {
+    /* Fine, we seem to have some kind of glXGetProcAddress(), so use it. */
+    return ((void *(*)(const GLubyte *))gpa)(name);
+  } else if (handle) {
+    /* Fallback to dlsym() if we have no glXGetProcAddress(), although we then
+       ignore the fact that OpenGL entry points could be context dependent. */
+    return dlsym(handle, name);
+  } else {
+    return NULL;
+  }
+}
+
+#else /* Linux */
+#include <GL/gl.h>
+#include <GL/glu.h>
+#include <GL/glut.h>
+#include <GL/glx.h>
+#include <dlfcn.h>
+
+static void*
+get_proc_addr(const char *name)
+{
+  static int firstTime = 1;
+  static void *glu = NULL, *glut = NULL;
+  void *p;
+  if (firstTime) {
+    firstTime = 0;
+    glu = dlopen("libGLU.so", RTLD_LAZY);
+    glut = dlopen("libglut.so", RTLD_LAZY);
+  }
+  /* Make sure to call these in this order. For whatever reason,
+     glXGetProcAddress appears to yield bogus addresses for GLUT routines. */
+  (void)
+    ((glu && (p = dlsym(glu, name))) ||
+     (glut && (p = dlsym(glut, name))) ||
+     (p = glXGetProcAddress((const GLubyte*)name)));
+  return p;
+}
+
+#endif
+
+static void throw_unsupported(const char* name)
+{
+  pure_throw(pure_app(pure_symbol(pure_sym("gl_unsupported")), 
+		      pure_cstring_dup(name) ));
+}
+%%
+
+%r %w(%p)
+{
+  static %r(APIENTRY*ptr)(%p) = NULL;
+  static const char name[] = "%n";
+  if (!ptr) {
+    ptr = (%r(APIENTRY*)(%p))get_proc_addr(name);
+    if (!ptr) throw_unsupported(name);
+  }
+  return (*ptr)(%a);
+}

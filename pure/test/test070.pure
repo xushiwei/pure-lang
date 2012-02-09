@@ -1,0 +1,46 @@
+
+// conditional compilation pragmas (Pure 0.49)
+
+// options are enabled by default
+#! --disable bar
+
+// check whether an option is defined
+#! --ifdef foo
+oops; // disabled
+#! --else
+#! --ifndef bar
+oops2; // disabled
+#! --endif
+#! --endif
+
+// nested conditionals
+#! --if foo
+foo x = x+1; // enabled
+#! --if bar
+bar x = x-1; // disabled
+#! --else
+bar x = x/2; // enabled
+// double --else gives error
+#! --else
+oops;
+#! --endif // bar
+baz x = 2*x; // enabled
+#! --endif // foo
+
+// unmatched --endif gives error
+#! --endif
+
+// reenable an option
+#! --enable bar
+
+#! --if bar
+bar 99;
+
+// test predefined version option
+#! --ifnot version-0.49+
+wtf;
+#! --else
+good;
+#! --endif
+
+// open option section at eof gives error

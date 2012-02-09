@@ -1,0 +1,176 @@
+2011-03-04  Albert Graef  <Dr.Graef@t-online.de>
+
+	* pure-loader/pure-loader.c (pure_async_func_init): Add proper
+	exception handling to the child process for asynchronous data
+	sources. This fixes a bug which causes spurious extra datasources
+	to be created in the child process if a datasource bails out with
+	a Pure exception.
+
+2010-10-23  Albert Graef  <Dr.Graef@t-online.de>
+
+	* 0.8 release
+
+2010-04-17  Albert Graef  <Dr.Graef@t-online.de>
+
+	* pure-loader/pure-gnumeric.c: Gnumeric 1.10 compatibility
+	fixes. Resolves issue #26 reported by asitdepends.
+
+2009-10-09  Albert Graef  <Dr.Graef@t-online.de>
+
+	* Makefile, pure-loader/pure-gnumeric.c,
+	pure-loader/pure-loader.c: Various windows compatibility
+	fixes. The module compiles cleanly on Windows now, but refuses to
+	load. :(
+
+2009-10-06  Albert Graef  <Dr.Graef@t-online.de>
+
+	* 0.5 release
+
+	* pure-loader/pure-loader.c (pure_reload, gl_reinit): More fixes
+	to the interpreter reinitialization. Destroy the OpenGL windows,
+	too, when reinitializing for a new interpreter instance, so that
+	we do not invoke stale callbacks from an old interpreter instance.
+
+2009-10-04  Albert Graef  <Dr.Graef@t-online.de>
+
+	* pure-loader/pure-gnumeric.c (pure_trigger): Reworked the trigger
+	function so that the callbacks take an additional data parameter
+	passed to trigger. The callbacks are now invoked by just passing
+	the callback data to them (no quote, eval any more) so that we can
+	avoid pure_evalx here, too.
+
+2009-10-03  Albert Graef  <Dr.Graef@t-online.de>
+
+	* pure-loader/pure-gnumeric.c (call_pure_function): Reworked so
+	that we avoid pure_evalx which is a performance hog. NOTE: This
+	requires Pure 0.36 or later.
+	(get_frame_sheet et al): Use the sheet object's new 'name'
+	property to look for widget names. NOTE: You'll need Gnumeric
+	1.9.14 or later to make this actually work.
+
+	* pure-loader/pure-loader.c (pure_reload): Fix broken interpreter
+	reinitialization.
+	(pure_async_func_stop): Remove datasource entry from hash table
+	when destroying it.
+
+2009-10-02  Albert Graef  <Dr.Graef@t-online.de>
+
+	* pure-loader/pure-gnumeric.c (pure_write_blob, pure_read_blob):
+	Encode key,value pair as a list instead of a tuple, so that we
+	don't choke on tuple values.
+
+2009-09-30  Albert Graef  <Dr.Graef@t-online.de>
+
+	* 0.4 release
+
+	* pure-loader/pure-gnumeric.c
+	(sheet_widget_list_base_get_result_link): Use
+	sheet_widget_list_base_get_result_dep in the Gnumeric API, to
+	avoid depending on SheetObject internals.
+	(sheet_widget_list_base_get_content_link): Provide an interface to
+	also get the content link.
+	(pure_sheet_objects): Return the content link in the label field.
+	(pure_get_cell_text, pure_get_range_text): New functions to get
+	the entered text of a cell or range.
+	(pure_get_cell_format, pure_set_cell_format)
+	(pure_get_range_format, pure_set_range_format): New functions to get
+	and set the format of a cell or range.
+
+2009-09-28  Albert Graef  <Dr.Graef@t-online.de>
+
+	* 0.3 release
+
+	* pure-loader/pure-gnumeric.c (pure2value): Gnumeric goes bonkers
+	on empty arrays, return empty value for empty Pure lists and
+	matrices instead.
+
+	* pure-loader/pure-gnumeric.c, pure-loader/pure-loader.c: Various
+	bugfixes in OpenGL rendering. Overhaul management of OpenGL
+	windows so that multiple views are supported.
+
+	* pure-loader/pure-gnumeric.c (pure_sheet_objects): Plug various
+	memleaks on Gnumeric expression nodes. Also fix up information
+	about list and combo widgets so that the linked cell is included.
+
+	* pure-func/pure_func.pure (pure_objects): Fix up realized check
+	for widgets.
+
+	* pure-loader/pure-gnumeric.c (pure_sheet_objects): Various
+	bugfixes. In particular, a sheet object may be associated with
+	different widgets in different views, so we return a list of
+	widgets in the last component of the object description now.
+
+2009-09-26  Albert Graef  <Dr.Graef@t-online.de>
+
+	* pure-func/pure_func.pure (pure_shell): Renamed from pure_evalstr.
+
+	* pure-loader/pure-gnumeric.c (pure_set_range_text): New function,
+	analogous to pure_set_cell_text, but handles cell ranges.
+	(pure_set_cell_text): Renamed from pure_set_text.
+
+2009-09-24  Albert Graef  <Dr.Graef@t-online.de>
+
+	* pure-loader/pure-gnumeric.c (get_frame): Look for frame widgets
+	first in the current sheet, then in all sheets of the same
+	workbook.
+	(pure_sheet_objects): List objects for all sheets of the workbook.
+
+	* pure-loader/pure-loader.c, pure-loader/pure-gnumeric.c:
+	Refactoring, bugfixes.
+
+	* Makefile, pure-loader/pure-gnumeric.c,
+	pure-loader/pure-loader.c, pure-func/pure_func.pure: OpenGL
+	support (requires GtkGLExt).
+
+2009-09-22  Albert Graef  <Dr.Graef@t-online.de>
+
+	* examples/widgets.gnumeric: Added example.
+
+	* pure-func/pure_func.pure (pure_objects): Add pure_objects
+	function to show a table with information about the objects in the
+	current sheet.
+
+	* pure-loader/pure-gnumeric.c (pure_trigger): Add a function which
+	repeatedly evaluates a given condition and evaluates and returns
+	another value as soon as the condition becomes true.
+
+2009-09-21  Albert Graef  <Dr.Graef@t-online.de>
+
+	* pure-loader/pure-gnumeric.c (pure_sheet_objects): Add a function
+	which reports various useful information about the widget objects
+	in the current sheet.
+
+2009-09-18  Albert Graef  <Dr.Graef@t-online.de>
+
+	* pure-loader/pure-loader.c (gplp_load_base): Add the pure-func
+	plugin directory to Pure's include path when creating the
+	interpreter. This lets the user import pure_func.pure and other
+	scripts distributed with gnumeric-pure if needed.
+
+	* pure-loader/pure-gnumeric.c (pure_read_blob): Bugfixes in blob
+	reader (asynchronous data source).
+	(pure_parse_range, pure_make_range): Add functions to convert
+	between textual range specifications and tuples.
+
+2009-09-17  Albert Graef  <Dr.Graef@t-online.de>
+
+	* pure-loader/pure-gnumeric.c (pure2value): Add support for int
+	matrices.
+	(pure_this_cell, pure_get_cell, pure_set_cell, pure_set_text,
+	pure_get_range, pure_set_range): Add basic cell inspection and
+	manipulation operations.
+
+	* pure-loader/pure-loader.c (gplp_func_desc_load): Check function
+	signatures for validity.
+
+	* pure-loader/pure-gnumeric.c (pure_gnmcall): Check arguments for
+	compatibility.
+
+2009-09-16  Albert Graef  <Dr.Graef@t-online.de>
+
+	* pure-loader/pure-gnumeric.c: Add suport for cell ranges ("r" type).
+
+	* Makefile: version bump
+
+	* 0.2 release, ChangeLog started
+

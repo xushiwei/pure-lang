@@ -1,0 +1,47 @@
+/* merge.pure -- Pure interface for C++ STL merge algorithms
+    
+Copyright (c) 2011 by Peter Summerland <p.summerland@gmail.com>.
+
+All rights reserved.
+
+This software is is part of pure-stlvec, an addon to the Pure Programming
+Language (http://code.google.com/p/pure-lang/).
+
+This software is distributed under a BSD-style license in the hope that it
+will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the COPYING file
+included with the pure-stlvec distribution package for details.
+
+*/
+
+using stlvec;
+using "lib:stlalgorithm";
+
+namespace stl;
+
+private extern int  sva_merge(expr*, expr*, expr*, expr* cmp);
+private extern void sva_inplace_merge(expr* it, expr* cmp);
+private extern bool sva_includes(expr*, expr*, expr* cmp);
+private extern int  sva_set_union(expr*, expr*, expr*, expr* cmp);
+private extern int  sva_set_intersection(expr*, expr*, expr*, expr* cmp);
+private extern int  sva_set_difference(expr*, expr*, expr*, expr* cmp);
+private extern int  sva_set_symmetric_difference(expr*, expr*, expr*, expr* cmp);
+
+merge it1::svrng it2::svrng it3::mutable_svrng cmp =
+  sva_merge it1 it2 it3 cmp;
+
+inplace_merge it::mutable_svrng cmp = sva_inplace_merge it cmp;
+
+includes it1::svrng it2::svrng cmp = sva_includes it1 it2 cmp;
+
+set_union it1::svrng it2::svrng it3::mutable_svrng cmp =
+  sva_set_union it1 it2 it3 cmp;
+
+set_intersection it1::svrng it2::svrng it3::mutable_svrng cmp =
+  sva_set_intersection it1 it2 it3 cmp;
+
+set_difference it1::svrng it2::svrng it3::mutable_svrng cmp =
+  sva_set_difference it1 it2 it3 cmp;
+
+set_symmetric_difference it1::svrng it2::svrng 
+  it3::mutable_svrng cmp = sva_set_symmetric_difference it1 it2 it3 cmp;

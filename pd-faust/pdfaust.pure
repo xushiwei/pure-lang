@@ -1,0 +1,194 @@
+
+// Common definitions shared by the pd-faust objects.
+
+/* We support both pure-faust (via the faust module; this works with both
+   faust1 and faust2) and the built-in LLVM bitcode interface (via the faust2
+   module; this requires faust2). Default is to use faust1. CAVEAT: The faust2
+   bitcode interface is currently considered experimental; the performance of
+   the resulting native code is not on par with natively compiled code yet.
+   So we recommend sticking to the default faust1 interface unless you're
+   feeling adventurous. */
+
+/* Uncomment the following line to select the faust2 interface. Instead, you
+   can also set the PURE_OPTION_FAUST2 environment variable on the command
+   line when invoking Pd. Note that if you enable this option then you'll also
+   have to build the Faust bitcode modules by running 'make bitcode'. */
+//#! --enable faust2
+
+#! --ifdef faust2
+using faust2;
+#! --else
+using faust;
+#! --endif
+
+using orddict, pdfaustui, system;
+
+// Check whether we're hosted by Pd.
+stringp (eval "extern char *pd_version_s(); pd_version_s;") &&
+eval "#! --enable pd\n";
+
+#! --ifndef pd
+// Stubs provided so that we can run the objects outside Pd (during batch
+// compilation, in particular).
+using "lib:lib/pdstub";
+#! --endif
+
+// These are provided by pd-pure.
+extern expr *pd_getdir();
+extern expr *pd_getfile();
+extern expr *pd_path();
+extern void pd_setfile(char*);
+extern void pd_send(char*, expr*);
+extern void pd_receive(char*);
+extern void pd_unreceive(char*);
+extern void pd_post(char*);
+extern void pd_error_s(char*);
+extern double pd_time();
+public pd_delay;
+
+// These are provided by the Pd runtime.
+extern float sys_getsr(), int sys_getblksize();
+
+// Special Pd symbols.
+nonfix bang write stop clear reload oscplay oscrecord;
+public coords;
+
+// Symbolic MIDI messages.
+public note polytouch ctl pgm touch bend;
+
+/* Setup information. *******************************************************/
+
+// Put the remaining stuff in the pdfaust namespace to keep the global
+// namespace clean.
+namespace pdfaust;
+
+// Get Pd's default sample rate and block size.
+let samplerate = int sys_getsr;
+let blocksize = sys_getblksize;
+
+// Make sure that samplerate and blocksize have sane values.
+let samplerate = if samplerate>0 then samplerate else 48000;
+let blocksize = if blocksize>0 then blocksize else 10;
+
+/* Faust modules are searched for in the directory indicated by 'synthdir'
+   (taken relative to the patch directory). */
+let synthdir = "dsp";
+
+// Post messages about MIDI and OSC controller assignments, respectively.
+let verbose_ctrlmap = true;
+let verbose_oscmap = true;
+
+// We want slider nums.
+let slider_nums_flag = true;
+
+// Update interval for the passive controls (msec). Adjust as needed.
+let update_time = 40;
+
+// Delay time for bang (button) controls (msec). Adjust as needed.
+let delay_time = 250;
+
+/* Helper functions. ********************************************************/
+
+using "lib:lib/util";
+
+// Mix down the voices of a synth.
+extern void mix(expr*, double*);
+
+// Do smooth cross fades.
+extern void fill(expr*, double*);
+extern void crossfade(expr*, expr*, expr*, expr*);
+let xfade = faust_init "lib/xfade" samplerate;
+
+// Handle exceptions in objects.
+error msg = pd_error_s msg $$ cst ();
+
+// Helper functions to dissect a filename.
+filename "" = "";
+filename name = join "/" $ init path +
+[case split "." name of
+   [] = "";
+   [name] = name;
+   parts = join "." $ init parts;
+ end] when
+  path = split "/" name;
+  name = last path;
+end;
+filetype "" = "";
+filetype name = case split "." name of
+  [] | [name] = "";
+  parts = "." + last parts;
+end when
+  path = split "/" name;
+  name = last path;
+end;
+
+// Library search for a given filename.
+libsearch dir::string name::string = name
+  if null name || index name "/" == 0 || index name "./" == 0 ||
+    index name "../" == 0;
+= catch id (default when
+  // List of extensions to try for dsp modules:
+  ext = if ~null (filetype name) || dir ~= synthdir then [""] else
+#! --ifdef faust2
+	[".bc"];
+#! --else
+	[".so",".dylib",".dll"];
+#! --endif
+  // try the current directory first
+  default = join "/" [pd_getdir, name];
+  do (try default) ext;
+  // try the given directory
+  do (try $ join "/" [pd_getdir, dir, name]) ext;
+  // try the library path
+  do (\path -> do (try $ join "/" [path, name]) ext) pd_path;
+  do (\path -> do (try $ join "/" [path, dir, name]) ext) pd_path;
+end) with
+  try name ext = throw name if pointerp (fopen (name+ext) "r");
+end;
+
+// Return an abbreviated print name for a file. This removes the patch
+// directory, if present, or returns the complete pathname otherwise.
+pfile name::string = case split "/" name of
+  path = join "/" $ drop n path if ~null path && take n (init path) == pd_path
+  when
+    pd_path = split "/" pd_getdir; n = #pd_path;
+  end;
+  _ = name;
+end;
+
+// Map a MIDI controller to a Faust control value.
+map_ctrl args val = case args of
+  /* Continuous controllers. The problem here is that the range 0..127 is not
+     symmetric. We'd like to map 64 to the center of the range (max-min)/2 and
+     at the same time retain the full control range min..max. So let's just
+     pretend that there are 128 controller values and map value 127 to the max
+     value anyway. */
+  _ (init,min,max,step) =
+    if val==127 then double max
+    else round_step step (min+(max-min)*val/128) with
+      // round to the nearest step size
+      round_step step x = if step~=0 then round (x/step)*step else x;
+    end;
+  // Anything else is considered a non-continous controller (switch).
+  _ = double (val>=64);
+end;
+
+// Reverse MIDI controller mapping. We also have to deal with the case of
+// passive controllers here.
+rmap_ctrl args val = case args of
+  _ (init,min,max,step) |
+  _ (min,max) =
+    (::max 0 . ::min 127) $ round ((val-min)/(max-min)*128);
+  _ = if val~=0 then 64 else 0;
+end;
+
+// Compare controller values. Returns true iff the given values are identical
+// up to rounding errors.
+
+const eps = 1e-5;
+eq_ctrl x::double y::double = abs (x-y) / z < eps when
+  z = max (abs x) (abs y);
+  z = if z>0 then z else 1.0;
+end;
+eq_ctrl x::real y::real = eq_ctrl (double x) (double y);
+eq_ctrl x y = x===y otherwise;

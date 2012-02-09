@@ -1,0 +1,97 @@
+/* anagrams.pure - print groups of words that have the same letters.
+
+Copyright (c) 2012 by Peter Summerland <p.summerland@gmail.com>.
+
+All rights reserved.
+
+This software is is part of pure-stlmap, an addon to the Pure Programming
+Language (http://code.google.com/p/pure-lang/).
+
+This software is distributed under a BSD-style license in the hope that it
+will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the COPYING file
+included with the pure-stlvec distribution package for details.
+
+*/
+
+using system, stlhmap, stlmap;
+
+// uses stlmap, update_elm_with
+print_anagrams_map_1 n words = tm when
+  tm = clock;
+  do add_word words;
+  anagrams = sort (<) (map str_words (filter (\(k=>v)->#v>=n) word_groups));
+  tm = clock - tm;
+  do puts anagrams;
+end with
+  add_word word = update_elm_with (:) word_groups (key=>word) when
+    key = strcat $ sort (<) (list word);
+  end;
+  str_words (k=>words) = join " " (reverse words);
+end when
+  word_groups = mkstlmap ((<),[]);  
+end;
+
+// uses stlmap, if member .. then ... else
+print_anagrams_map_2 n words = tm when
+  tm = clock;
+  do add_word words;
+  anagrams = sort (<) (map str_words (filter (\(k=>v)->#v>=n) word_groups));
+  tm = clock - tm;
+  do puts anagrams;
+end with
+  add_word word = () when
+    key = strcat $ sort (<) (list word);
+    if member word_groups key then 
+      update word_groups key (word:(word_groups!key))
+    else
+      update word_groups key [word];                         
+  end;
+  str_words (k=>words) = join " " (reverse words);
+end when
+  word_groups = mkstlmap ((<),[]);  
+end;
+
+// uses stlhmap, if member .. then ... else
+print_anagrams_hmap n words = tm when
+  tm = clock;  
+  do add_word words;
+  anagrams = sort (<) (map str_words (filter (\(k=>v)->#v>=n) word_groups)); 
+  tm = clock - tm;
+  do puts anagrams;
+end with
+  add_word word = () when
+    key = strcat $ sort (<) (list word);
+    if member word_groups key then 
+      update word_groups key (word:(word_groups!key))
+    else
+      update word_groups key [word];                         
+  end;
+  str_words (k=>words) = join " " (reverse words);
+end when
+  word_groups = emptystlhmap;  
+end;
+
+anagrams n = () when
+  fp = case fopen "anagram_groups_dict.txt" "r" of 
+    fopen _ _ = pointer 0;
+    fp = fp;
+  end;
+  words = if null fp then
+            puts "Can't open word file" $$ []
+          else if feof fp then
+            puts "Empty word file" $$ []
+          else
+            split "\n" (fget fp);
+  fclose fp;
+  clocks_per_msec = CLOCKS_PER_SEC / 1000;
+  tm_map1 = print_anagrams_map_1 n words;
+  puts "--------------------------------";
+  tm_map2 = print_anagrams_map_2 n words;
+  puts "--------------------------------";
+  tm_hmap = print_anagrams_hmap n words;
+  puts "--------------------------------";
+  printf "map1 time: %5.1f msecs\n" (tm_map1 / clocks_per_msec);
+  printf "map2 time: %5.1f msecs\n" (tm_map2 / clocks_per_msec);
+  printf "maph time: %5.1f msecs\n" (tm_hmap / clocks_per_msec);
+end;

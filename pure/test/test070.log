@@ -1,0 +1,30 @@
+foo x/*0:1*/ = x/*0:1*/+1;
+bar x/*0:1*/ = x/*0:1*//2;
+<stdin>, line 24: double '--else' pragma
+{
+  rule #0: foo x = x+1
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+{
+  rule #0: bar x = x/2
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+oops;
+oops
+baz x/*0:1*/ = 2*x/*0:1*/;
+<stdin>, line 31: unmatched '--endif' pragma
+{
+  rule #0: baz x = 2*x
+  state 0: #0
+	<var> state 1
+  state 1: #0
+}
+bar 99;
+49.5
+good;
+good
+<stdin>, line 47: missing '--endif' pragma at end of file

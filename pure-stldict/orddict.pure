@@ -1,0 +1,316 @@
+
+/* orddict.pure: mutable dictionaries and sets for ordered key and arbitrary
+   value types, implemented as STL (ordered) maps */
+
+/* NOTE: This module requires Pure 0.49 or later. It also needs a recent STL
+   implementation. The module is still experimental and the API is subject to
+   change, so beware. */
+
+/* Copyright (c) 2011 by Albert Graef <Dr.Graef@t-online.de>.
+
+   This file is part of the Pure standard library.
+
+   The Pure standard library is free software: you can redistribute it and/or
+   modify it under the terms of the GNU Lesser General Public License as
+   published by the Free Software Foundation, either version 3 of the License,
+   or (at your option) any later version.
+
+   Pure is distributed in the hope that it will be useful, but WITHOUT ANY
+   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+   FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License for
+   more details.
+
+   You should have received a copy of the GNU Lesser General Public License
+   along with this program.  If not, see <http://www.gnu.org/licenses/>. */
+
+/* Native interface. You can freely use most of these in addition to the
+   "standard" container API provided below. But note that orddict_free and
+   ordmdict_free are reserved for internal use as a sentry on orddict and
+   ordmdict objects and should never be called directly. */
+
+using stldictbase;
+using "lib:orddict";
+
+extern int orddict_tag();
+extern void orddict_symbol(expr*);
+extern expr* orddict(expr*);
+extern orddict* orddict_copy(orddict*);
+extern void orddict_clear(orddict*);
+extern void orddict_free(orddict*); // internal use only
+extern void orddict_add(orddict*, expr*);
+extern void orddict_add2(orddict*, expr*, expr*);
+extern void orddict_del(orddict*, expr*);
+extern void orddict_del2(orddict*, expr*, expr*);
+extern expr* orddict_get(orddict*, expr*);
+extern bool orddict_member(orddict*, expr*);
+extern bool orddict_member2(orddict*, expr*, expr*);
+extern bool orddict_empty(orddict*);
+extern bool orddict_equal(orddict*, orddict*);
+extern int orddict_size(orddict*);
+extern expr* orddict_list(orddict*);
+extern expr* orddict_tuple(orddict*);
+extern expr* orddict_vector(orddict*);
+extern expr* orddict_keys(orddict*);
+extern expr* orddict_vals(orddict*);
+
+extern int orddict_iterator_tag();
+extern expr *orddict_begin(expr*);
+extern expr *orddict_end(expr*);
+extern expr *orddict_find(expr*, expr*);
+extern expr *orddict_find2(expr*, expr*, expr*);
+extern void orddict_iterator_free(orddict_iterator*); // internal use only
+extern expr *orddict_iterator_dict(orddict_iterator*);
+extern expr *orddict_iterator_next(orddict_iterator*);
+extern expr *orddict_iterator_get(orddict_iterator*);
+extern expr *orddict_iterator_put(orddict_iterator*, expr*);
+extern void orddict_iterator_erase(orddict_iterator*);
+extern bool orddict_iterator_endp(orddict_iterator*);
+extern bool orddict_iterator_equal(orddict_iterator*, orddict_iterator*);
+
+extern int ordmdict_tag();
+extern void ordmdict_symbol(expr*);
+extern expr* ordmdict(expr*);
+extern ordmdict* ordmdict_copy(ordmdict*);
+extern void ordmdict_clear(ordmdict*);
+extern void ordmdict_free(ordmdict*); // internal use only
+extern void ordmdict_add(ordmdict*, expr*);
+extern void ordmdict_add2(ordmdict*, expr*, expr*);
+extern void ordmdict_del(ordmdict*, expr*);
+extern void ordmdict_del2(ordmdict*, expr*, expr*);
+extern expr* ordmdict_get(ordmdict*, expr*);
+extern bool ordmdict_member(ordmdict*, expr*);
+extern bool ordmdict_member2(ordmdict*, expr*, expr*);
+extern bool ordmdict_empty(ordmdict*);
+extern bool ordmdict_equal(ordmdict*, ordmdict*);
+extern int ordmdict_size(ordmdict*);
+extern expr* ordmdict_list(ordmdict*);
+extern expr* ordmdict_tuple(ordmdict*);
+extern expr* ordmdict_vector(ordmdict*);
+extern expr* ordmdict_keys(ordmdict*);
+extern expr* ordmdict_vals(ordmdict*);
+
+extern int ordmdict_iterator_tag();
+extern expr *ordmdict_begin(expr*);
+extern expr *ordmdict_end(expr*);
+extern expr *ordmdict_find(expr*, expr*);
+extern expr *ordmdict_find2(expr*, expr*, expr*);
+extern void ordmdict_iterator_free(ordmdict_iterator*); // internal use only
+extern expr *ordmdict_iterator_dict(ordmdict_iterator*);
+extern expr *ordmdict_iterator_next(ordmdict_iterator*);
+extern expr *ordmdict_iterator_get(ordmdict_iterator*);
+extern expr *ordmdict_iterator_put(ordmdict_iterator*, expr*);
+extern void ordmdict_iterator_erase(ordmdict_iterator*);
+extern bool ordmdict_iterator_endp(ordmdict_iterator*);
+extern bool ordmdict_iterator_equal(ordmdict_iterator*, ordmdict_iterator*);
+
+/* The orddict type. Orddicts are simply pointers to STL map objects which
+   hold key-value associations where both keys and values may be arbitrary
+   Pure expressions. The keys must be ordered using Pure's standard '<'
+   predicate. (This may be a partial order; keys x,y comparing neither x<y nor
+   y<x will be considered "equal" even though they may be syntactically
+   different, such as 0 and 0.0 in Pure.) Orddicts can be created from lists,
+   tuples and vectors using the orddict function. Memory management is
+   automatic. Please also note the following:
+
+   - Values can be omitted, so that orddicts can be used as an ordered set data
+     structure. This obviates the need for a separate set data structure at
+     the cost of some (small) increase in memory usage. Also note that you
+     can't really have a hash pair x=>y as a member of a set, since it always
+     denotes a key-value association. If such functionality is needed, you
+     could use ordinary pairs (x,y) instead (but you'd first need to define
+     '<' on them; Pure doesn't do this).
+
+   - Orddicts are *mutable*. Inserting a key into an orddict or deleting it
+     modifies the underlying STL data structure as a side effect of the
+     operation. If you need value semantics, you should use one of the dict or
+     set data structures from the standard library instead. (Another
+     possibility is to take a copy of an orddict using the copy function if
+     you need to preserve the original value, but note that this operation
+     takes O(n) time.)
+
+   - Two orddicts are syntactically equal iff they contain the same elements in
+     exactly the same order, using syntactic equality on both the keys and the
+     associated values. This test can always be done in linear time. There's
+     also a (somewhat more costly) semantic equality test which compares keys
+     using '<' and values using '==' (so keys and values may compare equal
+     which are syntactically different), and can also cope with the multidict
+     case (see below) where different entries for the "same" key may be listed
+     in any order. (In this case values will actually be compared using '=='
+     if it is defined, falling back to syntactic equality otherwise.)
+
+   - Orddicts are pretty-printed in the format 'orddict [...]' by default,
+     which will reconstruct the container when reentered as Pure code. With
+     the orddict_symbol function it is also possible to define your own custom
+     pretty-printing; see examples/orddict_examp.pure for an example. */
+
+let orddict_t = orddict_tag;
+type orddict x::pointer = check_ptrtag orddict_t x;
+orddictp x = pointerp x && check_ptrtag orddict_t x;
+
+// Make orddict work with numeric vectors.
+orddict x::nmatrix = orddict (smatrix x);
+
+// Create an orddict from a list of keys and a constant value.
+mkorddict y xs::rlist = orddict (zipwith (=>) xs (repeatn (#xs) y));
+
+/* Semantic equality of orddicts. These compare keys using the '<' predicate,
+   and values for semantic equality (falling back to syntactic equality if
+   this fails). Equality holds iff two orddicts contain the same key=>val
+   pairs. This test always works in O(n log n) time. */
+
+namespace stldict with
+x::orddict == y::orddict = orddict_equal x y;
+x::orddict ~= y::orddict = ~orddict_equal x y;
+end;
+
+// Minimal container API for orddicts.
+
+/* Note that if the key x is in the dict but doesn't have an associated value
+   (as in a set data structure), then m!x will return just x itself as the
+   associated value. In any case, m!x raises an out_of_bound exception if x is
+   not in the dict. */
+
+# m::orddict = orddict_size m;
+m::orddict ! x =
+  if orddict_member m x then orddict_get m x else throw out_of_bounds;
+
+/* Note that in addition to the usual container ops we also support copying
+   and clearing of dicts (copy, clear), as well as membership tests and
+   deletions of specific key=>val pairs (member, delete). Also note that, in
+   order to be consistent with indexing, the vals function actually returns
+   the *keys* for members which have no associated value. */
+
+null m::orddict = orddict_empty m;
+member m::orddict (x=>y) = orddict_member2 m x y;
+member m::orddict x = orddict_member m x;
+update m::orddict x y = orddict_add2 m x y $$ m;
+insert m::orddict (x=>y) = orddict_add2 m x y $$ m;
+insert m::orddict x = orddict_add m x $$ m;
+delete m::orddict (x=>y) = orddict_del2 m x y $$ m;
+delete m::orddict x = orddict_del m x $$ m;
+copy m::orddict = orddict_copy m;
+clear m::orddict = orddict_clear m;
+
+keys m::orddict = orddict_keys m;
+vals m::orddict = orddict_vals m;
+members m::orddict = orddict_list m;
+
+list m::orddict = orddict_list m;
+tuple m::orddict = orddict_tuple m;
+vector m::orddict = orddict_vector m;
+
+/* Iterator API. These operations give direct access to C++ iterators on the
+   underlying STL container which let you query the elements and do basic
+   manipulations of the container. This may sometimes be more efficient than
+   using the standard container API if you're dealing with large containers.
+   It is also used internally to compute lazy member lists of containers, see
+   the 'stream' function below. Most of the operations are in the stldict
+   namespace in order to keep the global namespace clean. */
+
+let orddict_iterator_t = orddict_iterator_tag;
+type orddict_iterator x::pointer = check_ptrtag orddict_iterator_t x;
+orddict_iteratorp x = pointerp x && check_ptrtag orddict_iterator_t x;
+
+i::orddict_iterator == j::orddict_iterator = orddict_iterator_equal i j;
+i::orddict_iterator ~= j::orddict_iterator = ~orddict_iterator_equal i j;
+
+namespace stldict with
+dict i::orddict_iterator = orddict_iterator_dict i;
+begin m::orddict = orddict_begin m;
+stldict::end m::orddict = orddict_end m;
+find m::orddict (x=>y) = orddict_find2 m x y;
+find m::orddict x = orddict_find m x;
+endp i::orddict_iterator = orddict_iterator_endp i;
+next i::orddict_iterator = orddict_iterator_next i if ~endp i;
+get i::orddict_iterator = orddict_iterator_get i if ~endp i;
+put i::orddict_iterator y = orddict_iterator_put i y if ~endp i;
+erase i::orddict_iterator = orddict_iterator_erase i if ~endp i;
+end;
+
+/***************************************************************************/
+
+/* Multidicts (STL multimap). These are represented using the ordmdict type
+   which works like an orddict but allows multiple instances of the same key in
+   a container. */
+
+let ordmdict_t = ordmdict_tag;
+type ordmdict x::pointer = check_ptrtag ordmdict_t x;
+ordmdictp x = pointerp x && check_ptrtag ordmdict_t x;
+
+ordmdict x::nmatrix = ordmdict (smatrix x);
+mkordmdict y xs::rlist = ordmdict (zipwith (=>) xs (repeatn (#xs) y));
+
+/* Note that in contrast to ordinary orddicts, the complexity of the multidict
+   equality check depends on the frequencies of keys and may thus require
+   O(n^2) time in degenerate cases. */
+
+namespace stldict with
+x::ordmdict == y::ordmdict = ordmdict_equal x y;
+x::ordmdict ~= y::ordmdict = ~ordmdict_equal x y;
+end;
+
+/* Note that m!x returns the list of *all* values associated with the key x
+   here (which may be empty if the key is not in the dict, rather than raising
+   an out_of_bounds exception). */
+
+# m::ordmdict = ordmdict_size m;
+m::ordmdict ! x = ordmdict_get m x;
+
+/* Note that update and insert will never override an existing member of the
+   dict here, they will always insert a new member. Also, delete will delete an
+   arbitrary member with the given key (or key=>val); there are no guarantees
+   that members with the same key (or key=>val) will be deleted in any
+   particular order. */
+
+null m::ordmdict = ordmdict_empty m;
+member m::ordmdict (x=>y) = ordmdict_member2 m x y;
+member m::ordmdict x = ordmdict_member m x;
+update m::ordmdict x y = ordmdict_add2 m x y $$ m;
+insert m::ordmdict (x=>y) = ordmdict_add2 m x y $$ m;
+insert m::ordmdict x = ordmdict_add m x $$ m;
+delete m::ordmdict (x=>y) = ordmdict_del2 m x y $$ m;
+delete m::ordmdict x = ordmdict_del m x $$ m;
+copy m::ordmdict = ordmdict_copy m;
+clear m::ordmdict = ordmdict_clear m;
+
+keys m::ordmdict = ordmdict_keys m;
+vals m::ordmdict = ordmdict_vals m;
+members m::ordmdict = ordmdict_list m;
+
+list m::ordmdict = ordmdict_list m;
+tuple m::ordmdict = ordmdict_tuple m;
+vector m::ordmdict = ordmdict_vector m;
+
+let ordmdict_iterator_t = ordmdict_iterator_tag;
+type ordmdict_iterator x::pointer = check_ptrtag ordmdict_iterator_t x;
+ordmdict_iteratorp x = pointerp x && check_ptrtag ordmdict_iterator_t x;
+
+i::ordmdict_iterator == j::ordmdict_iterator = ordmdict_iterator_equal i j;
+i::ordmdict_iterator ~= j::ordmdict_iterator = ~ordmdict_iterator_equal i j;
+
+namespace stldict with
+dict i::ordmdict_iterator = ordmdict_iterator_dict i;
+begin m::ordmdict = ordmdict_begin m;
+stldict::end m::ordmdict = ordmdict_end m;
+find m::ordmdict (x=>y) = ordmdict_find2 m x y;
+find m::ordmdict x = ordmdict_find m x;
+endp i::ordmdict_iterator = ordmdict_iterator_endp i;
+next i::ordmdict_iterator = ordmdict_iterator_next i if ~endp i;
+get i::ordmdict_iterator = ordmdict_iterator_get i if ~endp i;
+put i::ordmdict_iterator y = ordmdict_iterator_put i y if ~endp i;
+erase i::ordmdict_iterator = ordmdict_iterator_erase i if ~endp i;
+end;
+
+/***************************************************************************/
+
+/* Conversions between the different dict types. */
+
+orddict x::orddict | ordmdict x::ordmdict = x;
+orddict x::stlxdict = orddict (list x);
+ordmdict x::stlxdict = ordmdict (list x);
+
+// These are the conversions used by the stldictbase module.
+namespace stldict with
+orddict = ::orddict;
+ordmdict = ::ordmdict;
+end;

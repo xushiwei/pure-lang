@@ -1,0 +1,453 @@
+/* uts_stlmset_iter.pure -- tests for stlmset iterators */
+//-- --comment c_off --verbose off
+
+//*** Imports *********************************************************
+
+using system, stlmap, stlvec;
+//- ()
+
+/*** Iterators - Construction ****************************************/
+
+let sm1 = stlset ["a","b","c","d","e"];
+//- ()
+
+let i = stl::find sm1 "0"; stl::endp i;
+//- 1
+
+let i = stl::find sm1 "a"; get i;
+//- "a"
+
+let i = stl::find sm1 "z"; stl::endp i;
+//- 1
+
+let i = stl::l_bound sm1 "0"; get i;
+//- "a"
+
+let i = stl::l_bound sm1 "a";  get i;
+//- "a"
+
+let i = stl::l_bound sm1 "bb"; get i;
+//- "c"
+
+let i = stl::l_bound sm1 "dd"; get i;
+//- "e"
+
+let i = stl::l_bound sm1 "e";  get i;
+//- "e"
+
+let i = stl::l_bound sm1 "z"; stl::endp i;
+//- 1
+
+let i = stl::l_bound sm1 "f"; stl::endp i;
+//- 1
+
+let i = stl::u_bound sm1 "0"; get i;
+//- "a"
+
+let i = stl::u_bound sm1 "a";  get i;
+//- "b"
+
+let i = stl::u_bound sm1 "bb"; get i;
+//- "c"
+
+let i = stl::u_bound sm1 "dd"; get i;
+//- "e"
+
+let i = stl::u_bound sm1 "e"; stl::endp i;
+//- 1
+
+let i = stl::u_bound sm1 "z"; stl::endp i;
+//- 1
+
+let i, j = stl::lu_bounds sm1 "0"; (get i,get j);
+//- "a","a"
+
+let i, j = stl::lu_bounds sm1 "a"; (get i,get j);
+//- "a","b"
+
+let i, j = stl::lu_bounds sm1 "b"; (get i,get j);
+//- "b","c"
+
+let i, j = stl::lu_bounds sm1 "bb"; (get i,get j);
+//- "c","c"
+
+let i, j = stl::lu_bounds sm1 "dd"; (get i,get j);
+//- "e","e"
+
+let i, j = stl::lu_bounds sm1 "e"; (get i,stl::endp j);
+//- "e",1
+
+let i, j = stl::lu_bounds sm1 "z"; (stl::endp i,stl::endp j);
+//- 1,1
+
+let k = stl::iterator j; (stl::endp k, j==k, j===k);
+//- 1,1,0
+
+/*** Info **************************************************************/
+
+let sm1 = stlset ["a","b","c","d","e"];
+//- ()
+
+let i_begin, i_pastend = stl::begin sm1, stl::pastend sm1;
+//- ()
+
+let i_a = stl::find sm1 "a"; get i_a;
+//- "a"
+
+let i_c = stl::find sm1 "c"; get i_c;
+//- "c"
+
+stl::beginp i_begin, stl::beginp i_pastend;
+//- 1,0
+
+stl::beginp i_a, stl::beginp i_c;
+//- 1,0
+
+stl::endp i_begin, stl::endp i_pastend;
+//- 0,1
+
+stl::endp i_a, stl::endp i_c;
+//- 0,0
+
+let ok, smx, k, v = stl::get_info i_begin; (ok, smx===sm1, k, v);
+//- 1,1,stl::smbeg,"a"
+
+let ok, smx, k, v = stl::get_info i_a; (ok, smx===sm1, k, v);
+//- 1,1,stl::smbeg,"a"
+
+let ok, smx, k, v = stl::get_info i_c; (ok, smx===sm1, k, v);
+//- 1,1,"c","c"
+
+let ok, smx, k, v = stl::get_info i_pastend; (ok, smx===sm1, k, v);
+//- 1,1,stl::smend,[]
+
+/*** Element Access and Modification *******************************/
+
+let sm1 = stlset ["a","b","c","d","e"];
+//- ()
+
+let i_begin, i_pastend = stl::begin sm1, stl::pastend sm1;
+//- ()
+
+let i_a = stl::find sm1 "a"; get i_a;
+//- "a"
+
+let i_c = stl::find sm1 "c"; get i_c;
+//- "c"
+
+get i_begin, stl::get_key i_begin, stl::get_val i_begin;
+//- "a","a","a"
+
+get i_a, stl::get_key i_a, stl::get_val i_a;
+//- "a","a","a"
+
+get i_c, stl::get_key i_c, stl::get_val i_c;
+//- "c","c","c"
+
+catch id $ get i_pastend;
+//- out_of_bounds
+
+catch id $ stl::get_key i_pastend;
+//- out_of_bounds
+
+catch id $ stl::get_val i_pastend;
+//- out_of_bounds
+
+/*** Navigation *******************************************************/
+
+let sm1 = stlset ["a","b","c","d","e"];
+//- ()
+
+let i_b, i_e = stl::begin sm1, stl::pastend sm1;
+//- ()
+
+let i = stl::begin sm1;
+//- ()
+
+get i, stl::get_key i, stl::get_val i;
+//- "a","a","a"
+
+stl::inc i; get i;
+//- "b"
+
+stl::inc i; get i;
+//- "c"
+
+stl::inc i; get i;
+//- "d"
+
+stl::inc i; get i;
+//- "e"
+
+stl::inc i; stl::endp i;
+//- 1
+
+stl::inc i; stl::endp i;
+//- 1
+
+catch id $ get i;
+//- out_of_bounds
+
+stl::dec i; get i;
+//- "e"
+
+stl::dec i; get i;
+//- "d"
+
+stl::dec i; get i;
+//- "c"
+
+stl::dec i; get i;
+//- "b"
+
+stl::dec i; get i;
+//- "a"
+
+catch id $ stl::dec i;
+//- out_of_bounds
+
+stl::move i 4; get i;
+//- "e"
+
+stl::move i 100; stl::endp i;
+//- 1
+
+stl::move i (-1); get i;
+//- "e"
+
+catch id $ stl::move i (-100);
+//- out_of_bounds
+
+//*** Iterator Operators *************************************************/
+
+let sm1 = stlset ["a","b","c","d","e"];
+//- ()
+
+let i, j = stl::find sm1 "a", stl::find sm1 "e";
+//- ()
+
+i == j;
+//- 0
+
+i == i;
+//- 1
+
+i == stl::begin sm1;
+//- 1
+
+i == stl::pastend sm1;
+//- 0
+
+stl::begin sm1 == stl::pastend sm1;
+//- 0
+
+let i1 = i; i1 == i;
+//- 1
+
+/*** Iterator Ranges *************************************************/
+
+let sm1 = stlset ["a","b","c","d","e"];
+//- ()
+
+let i_begin, i_pastend = stl::begin sm1, stl::pastend sm1;
+//- ()
+
+let i_a = stl::find sm1 "a"; get i_a;
+//- "a"
+
+let i_c = stl::find sm1 "c"; get i_c;
+//- "c"
+
+let ok, smx, f, l = stl::range_info (i_begin,i_begin); ok;
+//- 1
+
+smx===sm1, f===i_begin, l===i_begin, f==i_begin, l==i_begin;
+//- 1,0,0,1,1
+
+let ok, smx, f, l = stl::range_info (i_a,i_begin); ok;
+//- 1
+
+smx===sm1, f===i_a, l===i_begin, f==i_a, l==i_begin;
+//- 1,0,0,1,1
+
+let ok, smx, f, l = stl::range_info (i_c,i_begin); ok;
+//- 0
+
+let ok, smx, f, l = stl::range_info (i_begin,i_pastend); ok;
+//- 1
+
+smx===sm1, f===i_begin, l===i_pastend, f==i_begin, l==i_pastend;
+//- 1,0,0,1,1
+
+let ok, smx, f, l = stl::range_info (i_a,i_c); ok;
+//- 1
+
+smx===sm1, f===i_a, l===i_c, f==i_a, l==i_c;
+//- 1,0,0,1,1
+
+members (i_begin,i_begin);
+//- []
+
+members (i_begin,i_pastend);
+//- ["a","b","c","d","e"]
+
+catch id $ members (i_pastend,i_begin);
+//- bad_argument
+
+members (i_pastend,i_pastend);
+//- []
+
+members (i_a,i_a);
+//- []
+
+members (i_a,i_c);
+//- ["a","b"]
+
+catch id $ members (i_c,i_a);
+//- bad_argument
+
+members (i_c,i_c);
+//- []
+
+members (i_begin,i_a);
+//- []
+
+members (i_a,i_begin);
+//- []
+
+members (i_a,i_pastend);
+//- ["a","b","c","d","e"]
+
+catch id $ members (i_pastend,i_a);
+//- bad_argument
+
+members (i_begin,i_c);
+//- ["a","b"]
+
+catch id $ members (i_c,i_begin);
+//- bad_argument
+
+members (i_c,i_pastend);
+//- ["c","d","e"]
+
+catch id $ members (i_pastend,i_c);
+//- bad_argument
+
+/*** Erroneous Ranges **************************************************/
+
+let sm1 = stlset ["a","b","c","d","e"];
+//- ()
+
+let i1_begin, i1_pastend = stl::begin sm1, stl::pastend sm1;
+//- ()
+
+let i1_a, i1_c = stl::find sm1 "a", stl::find sm1 "c";
+//- ()
+
+let sm2 = stlset ["a","b","c","d","e"];
+//- ()
+
+let i2_begin, i2_pastend = stl::begin sm2, stl::pastend sm2;
+//- ()
+
+let i2_a, i2_c = stl::find sm2 "a", stl::find sm2 "c";
+//- ()
+
+stl::range_info (i1_pastend,i1_begin);
+//- 0,#<pointer 0>,#<pointer 0>,#<pointer 0>
+
+stl::range_info (i1_pastend,i1_a);
+//- 0,#<pointer 0>,#<pointer 0>,#<pointer 0>
+
+stl::range_info (i1_c,i1_begin);
+//- 0,#<pointer 0>,#<pointer 0>,#<pointer 0>
+
+stl::range_info (i1_c,i1_a);
+//- 0,#<pointer 0>,#<pointer 0>,#<pointer 0>
+
+stl::range_info (i1_begin,i2_begin);
+//- 0,#<pointer 0>,#<pointer 0>,#<pointer 0>
+
+stl::range_info (i1_pastend,i2_pastend);
+//- 0,#<pointer 0>,#<pointer 0>,#<pointer 0>
+
+stl::range_info (i1_a,i2_a);
+//- 0,#<pointer 0>,#<pointer 0>,#<pointer 0>
+
+stl::range_info (i1_c,i2_c);
+//- 0,#<pointer 0>,#<pointer 0>,#<pointer 0>
+
+erase (sm1,i1_c); members sm1;
+//- ["a","b","d","e"]
+
+let ok, smx, k, v = stl::get_info i1_c; ok, smx===sm1;
+//- 0,1
+
+catch id $ members (i1_c,i1_pastend);
+//- bad_argument
+
+catch id $ erase (sm2,i1_c);
+//- bad_argument
+
+/*** Key Based Ranges *************************************************/
+
+let sm1 = stlset ["a","b","c","d","e"];
+//- ()
+
+let i_begin, i_pastend = stl::begin sm1, stl::pastend sm1;
+//- ()
+
+let i_a, i_b, i_c = stl::find sm1 "a", stl::find sm1 "b", stl::find sm1 "c";
+//- ()
+
+let i_a = stl::find sm1 "a"; get i_a;
+//- "a"
+
+let ok, smx, f, l = stl::range_info (sm1,stl::smbeg,stl::smbeg); ok;
+//- 1
+
+smx===sm1, f==i_begin, l==i_begin;
+//- 1,1,1
+
+let ok, smx, f, l = stl::range_info (sm1,stl::smbeg,stl::smend); ok;
+//- 1
+
+smx===sm1, f==i_begin, l==i_pastend;
+//- 1,1,1
+
+let ok, smx, f, l = stl::range_info (sm1,"a","c"); ok;
+//- 1
+
+smx===sm1, f==i_a, f==i_begin, l==i_c;
+//- 1,1,1,1
+
+let ok, smx, f, l = stl::range_info (sm1,"0","z"); ok;
+//- 1
+
+smx===sm1, f==i_begin, l==i_pastend;
+//- 1,1,1
+
+let ok, smx, f, l = stl::range_info (sm1,"0","0"); ok;
+//- 1
+
+smx===sm1, f==i_begin, l==i_begin;
+//- 1,1,1
+
+let ok, smx, f, l = stl::range_info (sm1,"z","z"); ok;
+//- 1
+
+smx===sm1, f==i_pastend, l==i_pastend;
+//- 1,1,1
+
+let ok, smx, f, l = stl::range_info (sm1,"c","a"); ok;
+//- 1
+
+smx===sm1, f==i_c, l==i_c;
+//- 1,1,1
+
+let ok, smx, f, l = stl::range_info (sm1,"b"); ok;
+//- 1
+
+smx===sm1, f==i_b, l==i_c;
+//- 1,1,1
+

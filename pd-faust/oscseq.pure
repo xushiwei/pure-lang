@@ -1,0 +1,269 @@
+
+/* oscseq object: Simple OSC recorder and sequencer. This object is to be
+   driven by midiseq which provides the timebase. (It is also possible to use
+   an external MIDI sequencer if it is configured as an MMC master.) The name
+   of the midi and osc files are specified as creation arguments (the second
+   argument is optional; if specified as 0 or an empty string, it defaults to
+   the midi file name in the first argument with new extension .osc). The
+   object understands the following messages:
+
+   - start t starts playback/recording at the given time offset in msec
+   - offset t only sets the playback offset
+   - stop or abort stops playback/recording
+   - clear purges the sequence so that you can start recording a new one
+   - save saves the current sequence in the file specified by the creation arg
+   - record 0 and record 1 disable and enable recording, respectively
+   - bang records the current setting of the controls in armed units at time 0
+     or at the time set with a previous offset message (this is also done
+     automatically when you start recording a new sequence from scratch; the
+     bang message does the same explicitly if not in playback mode)
+   - send t outputs the recorded parameter values for a given time t; send
+     without parameters does the same for the time set with a previous offset
+     message (or 0 if not set)
+
+   Recorded OSC messages are output on the outlet. When in recording mode, OSC
+   messages received on the inlet (actually anything that doesn't look like
+   one of the messages above) are recorded during playback; a stop message
+   then stores the recorded sequence. An abort message works like stop, but
+   throws away the current recording. A clear message purges the entire
+   recording so that you can start a new one. */
+
+nonfix bang start stop abort clear save send;
+public record offset sysex;
+
+using pdfaust;
+using namespace pdfaust;
+
+using system;
+
+#! --required oscseq
+oscseq name1 name2 = catch (\msg->pd_error_s msg $$ cst ()) (seq with
+  seq stop = pd_delay inf () when
+    pd_send "timer" stop;
+    put running false; put savestate ();
+    stop_offs = pd_time-get startt+get offs;
+    s = if get startt===() then []
+	else deltas (get startt) $ reverse $ get rec with
+	  // Convert a track with absolute timestamps starting at the given
+	  // time to a relative sequence with delta timestamps.
+	  deltas t1 [] = [];
+	  deltas t1 ((t2,msg):xs) = (t2-t1,msg):deltas t2 xs;
+	end;
+    null s || (put all $ comp [] $ mix 0.0 0.0 (get all) (get offs) s) with
+      // Mix two tracks with relative timestamps.
+      mix t t1 xs t2 [] = shift (t1-t) xs;
+      mix t t1 [] t2 ys = shift (t2-t) ys;
+      mix t t1 xs@((dt1,msg1):xs1) t2 ys@((dt2,msg2):ys2)
+      = (t1-t,msg1) : mix t1 t1 xs1 t2 ys when t1 = t1+dt1 end
+	if t1+dt1<=t2+dt2;
+      = (t2-t,msg2) : mix t2 t1 xs t2 ys2 when t2 = t2+dt2 end;
+      shift t xs = case xs of
+	(dt,msg):xs = (t+dt,msg):xs;
+	_ = xs;
+      end;
+      // Compress the parameter settings at time 0, to prevent redundant
+      // parameter changes from piling up at the beginning of the sequence.
+      comp ys [] = mkmsgs (reverse ys);
+      comp ys xs@((dt,msg):xs1) =
+	if dt==0 then comp (msg:ys) xs1 else mkmsgs (reverse ys)+xs;
+      mkmsgs msgs = [0.0,addr val | addr=>val = msgs] when
+	// This only keeps the last value for each OSC address.
+	msgs = record {addr=>val | addr@_ val = msgs};
+      end;
+    end;
+    put rec []; put startt ();
+    put seqlen $ foldl (\t (dt,_) -> t+dt) 0.0 (get all);
+    ~doublep stop_offs || put offs stop_offs;
+    //printf "stop: %s\n" $ str $ get offs;
+  end;
+  seq abort = pd_delay inf () when
+    pd_send "timer" stop;
+    put running false; put savestate ();
+    stop_offs = pd_time-get startt+get offs;
+    put rec []; put startt ();
+    ~doublep stop_offs || put offs stop_offs;
+    //printf "abort: %s\n" $ str $ get offs;
+  end;
+  seq clear = () when
+    put act []; put all [];
+    put rec []; put startt (); put savestate ();
+    put seqlen 0.0;
+  end;
+  seq save = osc_save name $ get all;
+  seq (start t) = case nextmsgs of
+    () = outmsg;
+    dt,msgs = {outmsg,pd_delay (dt-dt1) msgs};
+  end when
+    t = if doublep t then t else 0.0;
+    pd_send "timer" (get seqlen);
+    pd_send "timer" (offset 1 t);
+    /* Throw away the recorded sequence in case we got called while recording
+       is already in progress (e.g., when looping). XXXFIXME: It's not clear
+       what to do with earlier takes when our playback position suddenly
+       changes. Maybe we'd want to stash them away somewhere so that we can
+       merge them later? */
+    put rec []; put startt pd_time; put offs t;
+    dt1,s,msgs = case get savestate of
+      // Reuse the saved state if we got reset to the previous offset. This
+      // optimizes the case of a jump back to the beginning of a loop.
+      last_t,state = state if last_t==t;
+      _ = drop t (get all) [] with
+	drop t [] ys = t,[],reverse ys;
+	drop t s@((dt,msg):xs) ys =
+	  if t>dt then drop (t-dt) xs (msg:ys) else t,s,reverse ys;
+      end;
+    end;
+    msgs = {addr val | addr=>val = msgs} when
+      // This only keeps the last value for each OSC address, to avoid
+      // cascades of control changes for the same parameter.
+      msgs = record {addr=>val | addr@_ val = msgs};
+    end;
+    put act s; put running true; put savestate (t,dt1,s,msgs);
+    // When we start recording a new sequence, output a bang message to also
+    // record the current controller settings at the beginning of the
+    // recording.
+    outmsg = if get recording && null (get all) && t==0.0 then {bang} else {};
+    // Add any messages that we skipped over so that they are output
+    // immediately.
+    outmsg = if null msgs then outmsg else {outmsg,msgs};
+  end;
+  seq (offset t) = () when
+    t = if doublep t then t else 0.0;
+    put offs t;
+  end if get startt === ();
+  seq (record val) = () when
+    put recording (val~=0.0);
+  end;
+  seq bang = {bang,pd_delay 250.0 stop} when
+    // This tentatively puts us in recording mode so that the reply can be
+    // recorded. We subsequently send ourselves a stop message to store the
+    // recorded parameter settings.
+    put rec []; put startt pd_time;
+    //printf "bang: %s\n" $ str $ get offs;
+  end if get recording && get startt === ();
+  seq (send t) = msgs when
+    t = if doublep t then t else 0.0;
+    msgs = drop t (get all) [] with
+      drop t [] ys = reverse ys;
+      drop t s@((dt,msg):xs) ys =
+	if t>=dt then drop (t-dt) xs (msg:ys) else reverse ys;
+    end;
+    msgs = {addr val | addr=>val = msgs} when
+      // This only keeps the last value for each recorded parameter.
+      msgs = record {addr=>val | addr@_ val = msgs};
+    end;
+    //printf "send: %s\n" $ str t;
+  end if get startt === ();
+  seq send = seq $ send $ get offs;
+  // MMC support
+  seq (sysex msg::list) = res when
+    msg = map int msg;
+    //printf "sysex: %s\n" (str msg);
+    res = case msg of
+      // 0x7f = universal realtime sysex, n = device id (0x7f=any), 6 = MMC cmd
+      0x7f:n:6:cmd = case cmd of
+	/* This is probably incomplete. We just implement the basic MMC
+	   commands that we need, and there aren't any replies. MMC pause is
+	   understood as a synonym for MMC stop, and MMC deferred play does
+	   the same as an ordinary MMC play message. */
+	[1] | [9] = seq stop; // MMC stop / pause
+	[2] | [3] = seq (start (get offs)); // MMC play / deferred play
+	[6] = seq (record 1) $$ record 1; // MMC punch in
+	[7] = seq (record 0) $$ record 0; // MMC punch out
+	[0x44,6,1,h,m,s,fr,ff] = res when // MMC locate
+	  // h=hours m=min s=sec fr=frames (fps/sec) ff=subframes (100/fr)
+	  /* NOTE: Bit 6 and 7 of the h field encode the frame rate as
+	     follows: 00 = 24, 01 = 25, 10 = 30 drop, 11 = 30 fps. These are
+	     masked out to get the proper h value. XXXFIXME: Unfortunately,
+	     the fps bits don't seem to be set by all clients, so we don't
+	     actually use this value here and generally assume fps=30 instead.
+	     Thus you'll have to set your sequencer or mixer console to 30fps
+	     to get accurate offsets. */
+	  h = h and 0b11111;
+	  t = round (((((h*60+m)*60+s)*30+fr)*100+ff)/3);
+	  //printf "offset = %g\n" t;
+	  put offs t;
+	  res = if get running then seq (start (get offs))
+		else pd_send "timer" (offset 0 t);
+	end;
+	_ = ();
+      end;
+      _ = ();
+    end;
+  end;
+  seq (sysex _) = ();
+  // process pending messages
+  seq msgs::list = () if ~get running;
+  seq msgs::list = case nextmsgs of
+    () = smatrix msgs;
+    dt,newmsgs = {smatrix msgs,pd_delay dt newmsgs};
+  end;
+  seq msg = () when
+    put rec $ (pd_time,msg):get rec;
+  end if get recording && get startt ~== ();
+  seq _ = ();
+  // grab the next chunk of messages
+  nextmsgs = case get act of
+    [] = ();
+    (dt,msg):xs = dt,msg:ys when
+      ys = map (!1) $ takewhile (\(dt,msg) -> dt == 0) xs;
+      xs = dropwhile (\(dt,msg) -> dt == 0) xs;
+      put act xs;
+    end;
+  end;
+end when
+  name1 = if symbolp name1 then str name1+".osc"
+	  else if stringp name1 && ~null name1 then filename name1+".osc"
+	  else "";
+  name2 = if symbolp name2 then str name2+".osc" else name2;
+  name = if stringp name2 && ~null name2 then name2 else name1;
+  name = if stringp name then name else "";
+  fname = libsearch "osc" name;
+  loaded,s = test name with
+    test name = false,[] if null name || ~pointerp (fopen fname "r");
+    = catch readerr (true,osc_load name) otherwise;
+    readerr msg::string = false,[] when
+      pd_error_s ("oscseq: error loading "+fname);
+      pd_error_s msg;
+    end;
+    readerr _ = false,[] when
+      pd_error_s ("oscseq: error loading "+fname);
+    end;
+  end;
+  all = ref s; rec = ref []; act = ref s;
+  startt = ref (); offs = ref 0;
+  seqlen = ref $ foldl (\t (dt,_) -> t+dt) 0.0 s;
+  running = ref false;
+  recording = ref false;
+  savestate = ref ();
+  pd_receive "start";
+  pd_receive "sysex";
+  ~loaded || pd_post $ "oscseq: loaded "+pfile fname;
+end) with
+  // Our OSC file format is a simple text file with three columns: relative
+  // timestamps in msecs, OSC address of the control, value (a floating point
+  // number).
+  osc_load name::string = case fopen pathname "r" of
+    fp::pointer = map parse $ filter ok $ linenos $ split "\n" s with
+      linenos lines = zip (1..#lines) lines;
+      ok (_,s) = ~null s && s!0~="#"; // filter out empty and comment lines
+      parse (n,s) = t,addr val when
+	t,addr,val = catch (\_->throw $ sprintf "%s: %d: %s" (name,n,s))
+	  (sscanf s "%g %s %g");
+      end;
+    end if stringp s when s = fget fp end;
+    _ = []; // the file doesn't exist yet or is empty; this isn't an error
+  end when
+    pathname = libsearch "osc" name;
+  end;
+  osc_save name::string s = catch (\msg->pd_error_s msg $$ ())
+    (() when
+       fname = libsearch "osc" name;
+       fp = fopen fname "w";
+       pointerp fp || throw ("oscseq: error saving "+fname);
+       fprintf fp "# written by oscseq %s\n%-11s /oscaddr value\n"
+       (ctime time, "# delta");
+       do (\(t,addr@_ val) -> fprintf fp "%10.2f  %s %g\n" (t,addr,val)) s;
+       pd_post $ "oscseq: saved "+pfile fname;
+     end);
+end;

@@ -1,0 +1,256 @@
+/* uts_stlhmap.pure -- tests for stlhmap */
+//-- --comment c_on --verbose off
+
+//*** Imports *********************************************************
+
+using system, stlhmap, stlvec;
+//- ()
+
+elmless (k1=>_) (k2=>_) = k1 < k2; 
+//- ()
+
+hm_elms shm::stlhmap = sort elmless (members shm);
+//- ()
+
+//-- -s
+
+//*** Constructors ******************************************************
+
+let sv1 = ::stlvec ["a"=>1,"b"=>2,"c"=>3,"d"=>4,"e"=>5]; members sv1;
+//- ["a"=>1,"b"=>2,"c"=>3,"d"=>4,"e"=>5]
+
+let shm1 = stlhmap ["a"=>1,"b"=>2,"c"=>3,"d"=>4,"e"=>5]; hm_elms shm1;
+//- ["a"=>1,"b"=>2,"c"=>3,"d"=>4,"e"=>5]
+
+let shm1 = stlhmap {"a"=>1,"b"=>2,"c"=>3,"d"=>4,"e"=>5}; hm_elms shm1;
+//- ["a"=>1,"b"=>2,"c"=>3,"d"=>4,"e"=>5]
+
+let shm1 = stlhmap sv1; members shm1; hm_elms shm1;
+//- ["a"=>1,"b"=>2,"c"=>3,"d"=>4,"e"=>5]
+
+let shm2 = stlhmap shm1; hm_elms shm2;
+//- ["a"=>1,"b"=>2,"c"=>3,"d"=>4,"e"=>5]
+
+/*** Info ***************************************************************/
+
+let shm1 = stlhmap ["a"=>1,"b"=>2,"c"=>3,"d"=>4,"e"=>5];
+//- ()
+
+let shm2 = stlhmap ["b"=>2,"c"=>3,"d"=>4];
+//- ()
+
+#shm1, #shm2;
+//- 5,3
+
+stl::container_info shm1;
+//- 0,11,0.454545454545455,1.0
+
+stl::count shm1 "a", stl::count shm1 "e", stl::count shm2 "e";
+//- 1,1,0
+
+member shm1 "a";
+//- 1
+
+/*** Accessing Elements  **********************************************/
+
+let shm1 = stlhmap ["a"=>1,"b"=>2,"c"=>3,"d"=>4,"e"=>5];
+//- ()
+
+shm1!"a", shm1!"b", shm1!"e";
+//- 1,2,5
+
+catch id $ shm1!"x";
+//- out_of_bounds
+
+catch id $ shm1!stl::smbeg;
+//- 4
+
+sort elmless (members shm1);
+//- ["a"=>1,"b"=>2,"c"=>3,"d"=>4,"e"=>5]
+
+sort (<) (keys shm1);
+//- ["a","b","c","d","e"]
+
+sort (<) (vals shm1);
+//- [1,2,3,4,5]
+
+let sv1 = stlvec shm1;  #sv1;
+//- 5
+
+sort elmless (stl::vector shm1);
+//- {"a"=>1,"b"=>2,"c"=>3,"d"=>4,"e"=>5}
+
+//*** Custom Hash and Equal ***********************************************/
+
+//FIX
+
+//*** Modification ********************************************************/
+
+let shm1 = emptystlhmap;
+//- ()
+
+update shm1 "a" 10; hm_elms shm1;
+//- ["a"=>10]
+
+update shm1 "a" 1; hm_elms shm1;
+//- ["a"=>1]
+
+insert shm1 ["a"=>10,"b"=>2,"c"=>3,"d"=>4]; 
+//- 3
+
+hm_elms shm1;
+//- ["a"=>1,"b"=>2,"c"=>3,"d"=>4]
+
+insert shm1 ("a"=>20);
+//- 0
+
+hm_elms shm1;
+//- ["a"=>1,"b"=>2,"c"=>3,"d"=>4]
+
+insert shm1 ("e"=>5);
+//- 1
+
+hm_elms shm1;
+//- ["a"=>1,"b"=>2,"c"=>3,"d"=>4,"e"=>5]
+
+let xx = update_elm shm1 ("a"=>20); xx!"a";
+//- 20
+
+hm_elms shm1;
+//- ["a"=>20,"b"=>2,"c"=>3,"d"=>4,"e"=>5]
+
+let xx  = update_elm shm1 ("f"=>5); xx!"f";
+//- 5
+
+hm_elms shm1;
+//- ["a"=>20,"b"=>2,"c"=>3,"d"=>4,"e"=>5,"f"=>5]
+
+update shm1 "a" 1; hm_elms shm1;
+//- ["a"=>1,"b"=>2,"c"=>3,"d"=>4,"e"=>5,"f"=>5]
+
+erase (shm1,"f");
+//- 1
+
+hm_elms shm1;
+//- ["a"=>1,"b"=>2,"c"=>3,"d"=>4,"e"=>5]
+
+let shm2 = stlhmap ["x"=>23,"y"=>24,"z"=>26];
+//- ()
+
+stl::swap shm1 shm2;
+//- ()
+
+hm_elms shm1;
+//- ["x"=>23,"y"=>24,"z"=>26]
+
+hm_elms shm2;
+//- ["a"=>1,"b"=>2,"c"=>3,"d"=>4,"e"=>5]
+
+erase shm1; 
+//- 3
+
+#shm1;
+//- 0
+
+//** Equality **************************************************************/
+
+let shm1 = stlhmap ["a"=>1,"b"=>2,"c"=>3,"d"=>4];
+//- ()
+
+let shm2 = stlhmap ["b"=>2,"c"=>3,"d"=>4];
+//- ()
+
+shm1 == shm1;
+//- 1
+
+shm1 == shm2;
+//- 0
+
+shm2 == shm1;
+//- 0
+
+shm1 ~= shm1;
+//- 0
+
+shm1 ~= shm2;
+//- 1
+
+//*** Mapping *****************************************************
+
+let shm1 = stlhmap ["a"=>1,"b"=>2,"c"=>3,"d"=>4,"e"=>5];
+//- ()
+
+sort elmless $ listmap (\(k=>v)->k+1=>v+10) shm1; 
+//- ["b"=>11,"c"=>12,"d"=>13,"e"=>14,"f"=>15]
+
+sort elmless $ catmap (\(k=>v)->[k+1=>v+10]) shm1;
+//- ["b"=>11,"c"=>12,"d"=>13,"e"=>14,"f"=>15]
+
+sort (<) $ [ k+1 | (k=>y) = shm1];
+//- ["b","c","d","e","f"]
+
+sort elmless $ [ k=>v | (k=>v) = shm1; v mod 2];
+//- ["a"=>1,"c"=>3,"e"=>5]
+
+sort (<) $ { k+1 | (k=>y) = shm1};
+//- {"b","c","d","e","f"}
+
+{ {k;v} | (k=>v) = shm1; v mod 2};
+//- {"c","e","a";3,5,1}
+
+//-- -r
+
+//*** foldl, foldl1 **************************************************
+
+let shm1 = stlhmap ["a"=>1,"b"=>2,"c"=>3,"d"=>4,"e"=>5];
+//- ()
+
+foldl (\{r,l} (k=>v) -> {r+k,l+v}) {"",0} shm1;
+//- {"cdeab",15}
+
+foldl1 (\(r=>l) (k=>v) -> (r+k=>l+v)) shm1;
+//- "cdeab"=>15
+
+let shm2 = emptystlhmap;
+//- ()
+
+do (update_elm shm2) shm1;
+//- ()
+
+hm_elms shm2;
+//- ["a"=>1,"b"=>2,"c"=>3,"d"=>4,"e"=>5]
+
+//*** rowmap, rowcatmap, colmap colcatmap ********************************
+
+let shm1 = stlhmap ["a"=>1,"b"=>2,"c"=>3,"d"=>4,"e"=>5];
+//- ()
+
+rowmap (\(k=>v)->(k,v)) shm1;
+//- {("c",3);("d",4);("e",5);("a",1);("b",2)}
+
+rowcatmap (\(k=>v)->{k,v})shm1;
+//- {"c",3;"d",4;"e",5;"a",1;"b",2}
+
+rowcatmap (\(k=>v)->if v mod 2 then {k,v} else {}) shm1;
+//- {"c",3;"e",5;"a",1}
+
+colmap (\(k=>v)->(k,v)) shm1;
+//- {("c",3),("d",4),("e",5),("a",1),("b",2)}
+
+colcatmap (\(k=>v)->{k;v})shm1;
+//- {"c","d","e","a","b";3,4,5,1,2}
+
+colcatmap (\(k=>v)->if v mod 2 then {v;k} else {}) shm1;
+//- {3,5,1;"c","e","a"}
+
+//*** Key Oriented Functions *********************************************
+
+let shm1 = stlhmap ["a"=>1,"b"=>2,"c"=>3,"d"=>4,"e"=>5];
+//- ()
+
+member shm1 "0", member shm1 "a", member shm1 "c";
+//- 0,1,1
+
+member shm1 "e", member shm1 "f";
+//- 1,0
+

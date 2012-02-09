@@ -1,0 +1,150 @@
+
+// Interface types (0.50+).
+
+// A subset of the stack interface.
+interface nonempty_stack with
+  pop xs::nonempty_stack;
+  top xs::nonempty_stack;
+end;
+
+// The interface definition.
+get_interface nonempty_stack;
+
+// The actual type definition (type predicate rules). This is still empty at
+// this point, since the interface hasn't been instantiated yet.
+get_interface_typedef nonempty_stack;
+
+// Construction function for list stacks.
+astack xs::list = reverse xs;
+
+// Test function.
+foo xs::nonempty_stack = top xs, pop xs;
+// This fails right now, since the interface isn't instantiated yet.
+foo $ astack (1..10);
+
+// Implementation of pop and top in terms of lists.
+pop (x:xs) = xs;
+top (x:xs) = x;
+
+// The interface operations have been implemented, so this works now. (Note
+// that an interface gets recompiled automagically if there's any status
+// change in one of its operations.)
+foo $ astack (1..10);
+
+// This still fails, however, because the nonempty_stack interface doesn't
+// match the empty list (by design).
+foo $ astack [];
+
+// Full stack interface.
+interface stack with
+  push xs::stack x;
+  /* Test some of the more advanced diagnostics provided by interfaces. These
+     are all enabled with the -w option or the --warn pragma. In this case,
+     we'll be warned about the partial implementations of the pop and top
+     functions which don't apply to empty stacks (a.k.a. lists). */
+#! --warn
+  // Include the nonempty_stack interface. This effectively makes 'stack' a
+  // subtype of the 'nonempty_stack' type which offers one additional
+  // interface function.
+  interface nonempty_stack;
+#! --rewarn
+end;
+
+// Implementation of push in terms of lists.
+push xs@[] x | push xs@(_:_) x = x:xs;
+
+get_interface stack;
+get_interface_typedef stack;
+
+/* Looking at the actual patterns of the type (see the last result above; you
+   can also print these interactively in the interpreter with the 'show
+   interface' command), you'll see that, just as the warnings indicate, empty
+   stacks (lists) aren't supported by the interface because pop and top don't
+   provide rules for them. An easy way to fix this is to just turn pop and top
+   into "defined functions" (with the --defined pragma) since these are always
+   by definition "complete", as far as interfaces are concerned. */
+
+#! --defined pop
+#! --defined top
+
+foo xs::stack = top xs, pop xs;
+foo $ astack (1..10);
+// This causes an exception now because of the empty list which can't be
+// handled by pop and top.
+foo $ astack [];
+
+/* This was quick, but note that the --defined pragma will in fact silence
+   *any* further warnings concerning these functions. Therefore, in production
+   code we'd prefer to add proper rules which handle all the relevant cases in
+   an explicit fashion. */
+
+#! --nodefined pop
+#! --nodefined top
+
+// Default rules for pop and top.
+pop [] = throw "empty stack";
+top [] = throw "empty stack";
+
+foo $ astack (1..10);
+foo $ astack [];
+
+bar x xs::stack = foo (push xs x);
+bar 99 $ astack (1..3);
+
+// A different implementation of the same interface.
+
+nonfix nil;
+public cons;
+
+type cons nil | cons (cons xs x);
+
+push xs::cons x = cons xs x;
+pop xs::cons = case xs of cons xs x = xs; _ = throw "empty stack" end;
+top xs::cons = case xs of cons xs x = x;  _ = throw "empty stack" end;
+
+// Construction function for our fancy stacks.
+bstack xs::list = foldl push nil xs;
+
+// foo and bar now automagically work with these, too.
+foo $ bstack (1..3);
+bar 99 $ bstack (1..3);
+
+// Meta operations.
+
+// Add some interface functions.
+add_interface stack $ '[test1 (xs __type__ stack), test2 (xs __type__ stack)];
+get_interface stack;
+get_interface_typedef stack;
+
+test1 (x:xs) = x,xs;
+test2 xs::cons = case xs of cons xs x = xs,x; _ = throw "empty stack" end;
+
+// These *must* both fail now, because test1 doesn't support the fancy stacks,
+// while test2 doesn't support the list stacks, but both are in the interface.
+bar 99 $ astack (1..3);
+bar 99 $ bstack (1..3);
+
+// Delete an interface function.
+del_interface stack $ 'test2 (xs __type__ stack);
+get_interface stack;
+get_interface_typedef stack;
+
+// Removing test2 makes the list part of the interface work again.
+bar 99 $ astack (1..3);
+bar 99 $ bstack (1..3);
+
+// Reinsert test2 before test1.
+add_interface_at stack ('test1 (xs __type__ stack)) $
+'[test2 (xs __type__ stack)];
+get_interface stack;
+get_interface_typedef stack;
+
+// Both should fail again.
+bar 99 $ astack (1..3);
+bar 99 $ bstack (1..3);
+
+// Create an entirely new interface.
+public monoid;
+add_interface monoid $ '[x __type__ monoid+y __type__ monoid];
+get_interface monoid;
+get_interface_typedef monoid;

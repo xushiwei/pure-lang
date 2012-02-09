@@ -1,0 +1,220 @@
+/* uts_stlhset.pure -- tests for stlhset */
+//-- --comment c_on --verbose off
+
+//*** Imports *********************************************************
+
+using system, stlhmap, stlvec;
+//- ()
+
+hs_elms shm = sort (<) (members shm);
+//- ()
+
+//*** Constructors ******************************************************
+
+let sv1 = ::stlvec ["a","b","c","d","e"]; members sv1;
+//- ["a","b","c","d","e"]
+
+let shm1 = stlhset ["a","b","c","d","e"]; 
+//- ()
+
+hs_elms shm1;
+//- ["a","b","c","d","e"]
+
+let shm1 = stlhset {"a","b","c","d","e"}; 
+//- ()
+
+hs_elms shm1;
+//- ["a","b","c","d","e"]
+
+let shm1 = stlhset sv1; members shm1; hs_elms shm1;
+//- ["a","b","c","d","e"]
+
+let shm2 = stlhset shm1; hs_elms shm2;
+//- ["a","b","c","d","e"]
+
+//*** Info ***************************************************************
+
+let shm1 = stlhset ["a","b","c","d","e"];
+//- ()
+
+let shm2 = stlhset ["b","c","d"];
+//- ()
+
+#shm1, #shm2;
+//- 5,3
+
+stl::container_info shm1;
+//- 1,11,0.454545454545455,1.0
+
+stl::count shm1 "a", stl::count shm1 "e", stl::count shm2 "e";
+//- 1,1,0
+
+member shm1 "a";
+//- 1
+
+//*** Accessing Elements  **********************************************
+
+let shm1 = stlhset ["a","b","c","d","e"];
+//- ()
+
+shm1!"a", shm1!"b", shm1!"e";
+//- "a","b","e"
+
+catch id $ shm1!"x";
+//- out_of_bounds
+
+sort (<) (members shm1);
+//- ["a","b","c","d","e"]
+
+sort (<) (keys shm1);
+//- ["a","b","c","d","e"]
+
+sort (<) (vals shm1);
+//- ["a","b","c","d","e"]
+
+// let sv1 = stlvec shm1;  #sv1;
+// //- 5
+
+sort (<) (stl::vector shm1);
+//- {"a","b","c","d","e"}
+
+//*** Custom Hash and Equal ***********************************************
+
+//FIX
+
+//*** Modification ********************************************************
+
+let shm1 = emptystlhset;
+//- ()
+
+insert shm1 ["a","b","c","d"]; 
+//- 4
+
+hs_elms shm1;
+//- ["a","b","c","d"]
+
+insert shm1 ("a");
+//- 0
+
+hs_elms shm1;
+//- ["a","b","c","d"]
+
+insert shm1 ("e");
+//- 1
+
+hs_elms shm1;
+//- ["a","b","c","d","e"]
+
+let shm2 = stlhset ["x","y","z"];
+//- ()
+
+stl::swap shm1 shm2;
+//- ()
+
+hs_elms shm1;
+//- ["x","y","z"]
+
+hs_elms shm2;
+//- ["a","b","c","d","e"]
+
+erase shm1; 
+//- 3
+
+#shm1;
+//- 0
+
+//** Equality **************************************************************
+
+let shm1 = stlhset ["a","b","c","d"];
+//- ()
+
+let shm2 = stlhset ["b","c","d"];
+//- ()
+
+shm1 == shm1;
+//- 1
+
+shm1 == shm2;
+//- 0
+
+shm2 == shm1;
+//- 0
+
+shm1 ~= shm1;
+//- 0
+
+shm1 ~= shm2;
+//- 1
+
+//*** Mapping *****************************************************
+
+let shm1 = stlhset ["a","b","c","d","e"];
+//- ()
+
+sort (<) $ listmap (\k->k+1) shm1;
+//- ["b","c","d","e","f"]
+
+sort (<) $ catmap (\k->[k+1]) shm1;
+//- ["b","c","d","e","f"]
+
+sort (<) $ [ k+1 | k = shm1];
+//- ["b","c","d","e","f"]
+
+sort (<) $ { k+1 | k = shm1};
+//- {"b","c","d","e","f"}
+
+sort (\(x,_) (y,_) -> x<y) $ { (k,k) | k = shm1};
+//- {("a","a"),("b","b"),("c","c"),("d","d"),("e","e")}
+
+
+//*** foldl, foldl1 **************************************************
+
+let shm1 = stlhset ["a","b","c","d","e"];
+//- ()
+
+foldl (\r k ->r+k) "" shm1;
+//- "cdeab"
+
+foldl1 (\r k -> r+k) shm1;
+//- "cdeab"
+
+let shm2 = emptystlhset;
+//- ()
+
+do (insert shm2) shm1;
+//- ()
+
+hs_elms shm2;
+//- ["a","b","c","d","e"]
+
+//*** rowmap, rowcatmap, colmap colcatmap ********************************
+
+let shm1 = stlhset ["a","b","c","d","e"];
+//- ()
+
+rowmap (\k->(k,ord k - ord "a" + 1)) shm1;
+//- {("c",3);("d",4);("e",5);("a",1);("b",2)}
+
+rowcatmap (\k->{k,ord k - ord "a" + 1})shm1;
+//- {"c",3;"d",4;"e",5;"a",1;"b",2}
+
+rowcatmap (\k->if (ord k) mod 2 then {k, ord k - ord "a" + 1} else {}) shm1;
+//- {"c",3;"e",5;"a",1}
+
+colmap (\k->(k,k+1)) shm1;
+//- {("c","d"),("d","e"),("e","f"),("a","b"),("b","c")}
+
+colcatmap (\k->{k;ord k - ord "a" + 1})shm1;
+//- {"c","d","e","a","b";3,4,5,1,2}
+
+//*** Key Oriented Functions *********************************************
+
+let shm1 = stlhset ["a","b","c","d","e"];
+//- ()
+
+member shm1 "0", member shm1 "a", member shm1 "c";
+//- 0,1,1
+
+member shm1 "e", member shm1 "f";
+//- 1,0
+

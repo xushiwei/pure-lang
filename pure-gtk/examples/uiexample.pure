@@ -1,0 +1,114 @@
+
+/* GtkBuilder UI example. This shows how to create a simple application from a
+   UI file (see uiexample.glade) made with the Glade-3 interface builder. */
+
+using ffi, gtk, glib, system;
+
+/* Helper functions. */
+
+// Grab a malloced string from GTK without leaking memory.
+g_string s::pointer = cstring_dup $ sentry glib::free s;
+
+// Convenience macros to create signal and event callbacks via ffi.
+def callback cb = fclos cb FFI_DEFAULT_ABI void_t (pointer_t, pointer_t);
+def event_callback cb = fclos cb FFI_DEFAULT_ABI sint_t
+			(pointer_t, pointer_t, pointer_t);
+
+/* We declare our own versions of these routines which use raw strings (void*)
+   instead of char*. This is necessary because Pure automagically converts
+   char* from/to the system encoding, but gtk_file_chooser_get_filename
+   returns a malloced string which must be freed by the caller, and would
+   hence leak memory when passed as a char*. Also, gtk_text_buffer_set_text
+   expects a string in UTF-8 encoding, which is what Pure already uses
+   internally, so we don't want to convert that argument either. */
+
+#! --if *-mingw32
+// On Windows, we need this dll to get the following functions.
+using "lib:libgtk-win32-2.0-0";
+#! --endif
+
+extern void *gtk_file_chooser_get_filename(GtkFileChooser*);
+extern void gtk_text_buffer_set_text(GtkTextBuffer*, void*, int);
+
+/* Initialize. This also passes arguments to GTK. */
+
+gtk::init argcp argvp when
+  argcp, argvp = {argc}, ptr (byte_cstring_pointer argv) with
+    ptr p::pointer = pointer_cast (pointer_type p+"*") q when
+      q = malloc SIZEOF_POINTER; put_pointer q $ clear_sentry p;
+    end;
+  end;
+end;
+
+/* Callback definitions. */
+
+const GTK_WIDGET = pointer_cast $ pointer_tag "GtkWidget*";
+const GTK_TEXT_VIEW = pointer_cast $ pointer_tag "GtkTextView*";
+const GTK_FILE_CHOOSER = pointer_cast $ pointer_tag "GtkFileChooser*";
+
+// main window 'destroy' signal
+destroy (widget, data) = gtk::main_quit;
+
+// new button 'clicked'
+new (widget, data) = () when
+  buffer = gtk::text_view_get_buffer (GTK_TEXT_VIEW widget);
+  gtk::text_buffer_set_text buffer "" (-1);
+end;
+
+// file button 'file-set'
+// NOTE: GTK+ 2.15.4 is needed to make this work properly. Earlier versions
+// also emit this signal when the dialog is canceled.
+file (widget, data) = () when
+  fname = g_string $ gtk_file_chooser_get_filename (GTK_FILE_CHOOSER data);
+  text = fget (fopen fname "r");
+  buffer = gtk::text_view_get_buffer (GTK_TEXT_VIEW widget);
+  gtk_text_buffer_set_text buffer text (-1);
+end;
+
+// quit button 'clicked'
+quitb (widget, data) = gtk::widget_destroy (GTK_WIDGET widget);
+
+// Turn these into C callbacks so that GTK can call them.
+let destroy_cb = callback destroy;
+let new_cb = callback new;
+let file_cb = callback file;
+let quit_cb = callback quitb;
+
+/* The connect callback automagically establishes all signal connections
+   specified in the UI file. Check the main function below to see how this is
+   used. Note that in Glade the callbacks are specified on the 'Signals' tab
+   of the 'Properties' pane. You specify the name of the callback in the
+   'Handler' field and, optionally, the name of a connected widget in the
+   'User data' field. In the latter case, the connected widget is passed as
+   the 'widget' argument of the callback, whereas the signaled widget becomes
+   the 'data' argument. */
+
+connect (builder, object, signal_name, handler_name, connect_object,
+	 flags, data)
+= glib::signal_connect_data object signal_name (eval handler_name) data
+  NULL flags if null connect_object;
+= glib::signal_connect_object object signal_name (eval handler_name)
+  connect_object flags;
+
+let connect_cb = fclos connect FFI_DEFAULT_ABI void_t
+  (pointer_t, pointer_t, string_t, string_t, pointer_t, uint_t, pointer_t);
+
+/* Main function. */
+
+// We read the contents of the UI file into a string constant here, so that
+// the UI file isn't needed at runtime when the script is batch-compiled.
+const ui::string = fget $ fopen "uiexample.glade" "r";
+
+main = gtk::main // enter the main loop
+when
+  // create the application from the UI description
+  builder = gtk::builder_new;
+  gtk::builder_add_from_string builder ui (-1) NULL;
+  // connect signals
+  gtk::builder_connect_signals_full builder connect_cb NULL;
+  // get the main window and show it
+  window = gtk::builder_get_object builder "window1";
+  gtk::widget_show (GTK_WIDGET window);
+end;
+
+if compiling then () else main;
