@@ -1,0 +1,105 @@
+--- configure.in.orig	2010-01-19 12:13:14.000000000 +0100
++++ configure.in	2010-04-22 01:15:21.000000000 +0200
+@@ -670,6 +670,13 @@
+ 
+ # GraphicsMagick++
+ 
++WANT_MAGICK=false
++AC_ARG_ENABLE(graphicsmagick,
++  [AS_HELP_STRING([--enable-graphicsmagick],
++     [reading images (default is no)])],
++  [if test "$enableval" = yes; then WANT_MAGICK=true; fi], [])
++
++if $WANT_MAGICK; then
+ warn_magick=
+ AC_CHECK_PROGS(MAGICK_CONFIG, [GraphicsMagick++-config GraphicsMagick-config])
+ if test -z "$MAGICK_CONFIG"; then
+@@ -677,14 +684,23 @@
+ else
+   AC_DEFINE(HAVE_MAGICK, 1, [Define if GraphicsMagick++ is available.])
+ fi
++else
++  warn_magick="GraphicsMagick support disabled."
++fi
+ 
+ # ---------------------------------------------------------------------
+ 
+ ## libraries needed for graphics
++WANT_NATIVE_GRAPHICS=false
++AC_ARG_ENABLE(native-graphics,
++  [AS_HELP_STRING([--enable-native-graphics],
++     [experimental support for native graphics (default is no)])],
++  [if test "$enableval" = yes; then WANT_NATIVE_GRAPHICS=true; fi], [])
+ 
+-warn_freetype=""
+-warn_ftgl=""
++warn_freetype=
++warn_ftgl=
+ 
++if $WANT_NATIVE_GRAPHICS; then
+ OCTAVE_OPENGL
+ if test -n "$OPENGL_LIBS"; then
+   AC_DEFINE(HAVE_OPENGL, 1, [Define if OpenGL is available])
+@@ -744,6 +760,10 @@
+     AC_LANG_POP(C++)
+   fi
+ fi
++else
++  warn_freetype="No FreeType support. Native graphics disabled."
++  warn_ftgl="No FTGL support. Native graphics disabled."
++fi
+ 
+ GRAPHICS_LIBS=
+ GRAPHICS_CFLAGS=
+@@ -774,11 +794,13 @@
+ 
+ AC_PATH_PROG(FLTK_CONFIG, fltk-config, no)
+ 
+-warn_fltk_config=""
+-warn_fltk_opengl=""
++warn_fltk_config=
++warn_fltk_opengl=
+ 
+ if test "$FLTK_CONFIG" = "no" ; then
+   warn_fltk_config="FLTK config script not found.  Native graphics will be disabled."
++elif ! $WANT_NATIVE_GRAPHICS; then
++  warn_fltk_config="No FLTK support. Native graphics disabled."
+ else
+   FLTK_CFLAGS="`$FLTK_CONFIG $fltkconf_args --use-gl --cflags`"
+   FLTK_LDFLAGS="`$FLTK_CONFIG $fltkconf_args --use-gl --ldflags`"
+@@ -2436,30 +2458,30 @@
+ 
+ native_graphics=true
+ if test -n "$warn_freetype"; then
+-  AC_MSG_WARN("$warn_freetype")
++  AC_MSG_WARN($warn_freetype)
+   native_graphics=false
+   warn_msg_printed=true
+ fi
+ 
+ if test -n "$warn_ftgl"; then
+-  AC_MSG_WARN("$warn_ftgl")
++  AC_MSG_WARN($warn_ftgl)
+   native_graphics=false
+   warn_msg_printed=true
+ fi
+ 
+ if test -n "$warn_fltk_config"; then
+-  AC_MSG_WARN("$warn_fltk_config")
++  AC_MSG_WARN($warn_fltk_config)
+   native_graphics=false
+   warn_msg_printed=true
+ fi
+ 
+ if test -n "$warn_fltk_opengl"; then
+-  AC_MSG_WARN("$warn_fltk_opengl")
++  AC_MSG_WARN($warn_fltk_opengl)
+   native_graphics=false
+   warn_msg_printed=true
+ fi
+ 
+-if $native_graphics; then
++if ! $WANT_NATIVE_GRAPHICS || $native_graphics; then
+   true;
+ else
+   AC_MSG_WARN([])

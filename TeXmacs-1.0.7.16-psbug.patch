@@ -1,0 +1,29 @@
+diff -ru TeXmacs-1.0.7.16-src.orig/src/Plugins/Ghostscript/gs_utilities.cpp TeXmacs-1.0.7.16-src/src/Plugins/Ghostscript/gs_utilities.cpp
+--- TeXmacs-1.0.7.16-src.orig/src/Plugins/Ghostscript/gs_utilities.cpp	2012-07-09 16:33:21.000000000 +0200
++++ TeXmacs-1.0.7.16-src/src/Plugins/Ghostscript/gs_utilities.cpp	2012-11-07 06:24:53.290583215 +0100
+@@ -42,7 +42,7 @@
+ bool
+ gs_image_size_sub (string buf, int& w_pt, int& h_pt) {
+   int pos= search_forwards ("\n%%BoundingBox: ", buf);
+-  if (pos < 0) search_forwards ("%%BoundingBox: ", buf);
++  if (pos < 0) pos = search_forwards ("%%BoundingBox: ", buf);
+   if (pos < 0) return false;
+   if (buf[pos] == '\n') pos++;
+   bool ok= read (buf, pos, "%%BoundingBox: ");
+@@ -63,6 +63,7 @@
+   if (!ok) return false;
+   w_pt= x2-x1;
+   h_pt= y2-y1;
++  if (h_pt==0 && w_pt==0) h_pt = 1;
+   return true;
+ }
+ 
+@@ -80,7 +81,7 @@
+   if (!err && gs_image_size_sub (buf, w_pt, h_pt)) return;
+   cerr << "TeXmacs Cannot read image file '" << image << "'"
+        << " in gs_image_size" << LF;
+-  w_pt= 0; h_pt= 0;
++  w_pt= 0; h_pt= 1;
+ }
+ 
+ void ps_bounding_box (url image, int& x1, int& y1, int& x2, int& y2);

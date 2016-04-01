@@ -1,0 +1,134 @@
+
+       ==================================================================
+       MinGW/MSYS Installation Instructions for LLVM and Pure Compilation
+       ==================================================================
+
+MinGW is a Windows port of the GNU compiler suite which produces native
+executables on the Windows platform (see http://www.mingw.org).
+
+MSYS is a small system which enables to run GNU utilities and shell scripts
+on Windows, namely the configure scripts and GNU make (see
+http://www.mingw.org/msys.shtml).
+
+Here you find instructions how to install both these packages in order to
+successfully compile LLVM and Pure on your Windows box.
+
+Both MinGW and MSYS can be downloaded from this page:
+http://sourceforge.net/project/showfiles.php?group_id=2435
+
+1. MinGW installation
+
+   Download the latest MinGW installation program ("MinGW-5.1.4.exe" in my
+   case) and binutils 2.18.50 ("binutils-2.18.50-20080109-2.tar.gz").
+
+   Launch the installation program, when asked check "Download and Install" and
+   when again asked select "Current" package to be installed. On the next
+   dialog window you can select packages to be installed. Select at least
+   "MinGW base tools" and "g++ compiler". You can select other stuff if you
+   plan to use it. DO NOT select "MinGW Make", it is very defficient. In the
+   next dialog box select a suitable installation folder e.g. "d:\mingw" in my
+   case, and proceed.
+   
+   In the next step install the newer version of binutils. Simply extract the
+   tree from the gzipped tarball over the MinGW installation tree (i.e. from
+   bin/ to bin/ etc.) and allow files to be overwritten.
+
+   === NOTE: GCC 4.4 installation ===
+
+   We highly recommend using the latest mingw gcc version (gcc-4.4, at the
+   time of this writing). This version generates *much* better code than the
+   gcc-3.x version included in a default mingw install, and it can readily be
+   used with the pure-gen program. gcc 4.4 is available as a separate package
+   "gcc-full-4.4.0-mingw32-bin-2.tar.lzma" from the mingw website.
+   Installation instructions can be found at:
+
+   http://downloads.sourceforge.net/mingw/gcc-4.4.0-mingw32-notes.txt
+
+   NOTE: Contrary to what this file says, you'll *definitely* need a version
+   >= 3.15 of the mingw-runtime, so make sure that your mingw installation has
+   this. If not then you'll need to download the corresponding tarball from
+   the mingw website and unpack it in the directory where you installed mingw.
+
+2. MSYS installation
+
+   From the page mentioned above download the following packages:
+   - current release of MSYS-xxx.exe ("MSYS-1.0.10.exe" in my case)
+   - current release of msysDTK-yyy.exe ("msysDTK-1.0.1.exe")
+   - latest version of bison ("bison-2.3-MSYS-1.0.11-1.tar.bz2")
+   - latest version of flex ("flex-2.5.33-MSYS-1.0.11-1.tar.bz2")
+   - latest version of regex ("regex-0.12-MSYS-1.0.11-1.tar.bz2")
+
+   Launch the MSYS installation program and install MSYS into a DIFFERENT
+   folder than MinGW (e.g. "D:\msys\1.0" in my case). Then proceed further.
+   Reply "y" when asked whether to continue with postinstall, "y" when asked
+   whether MinGW is intalled and type the path to your MinGW installation when
+   asked to do so. Use normal slashes in that path (e.g. "d:/mingw"). Should
+   this setp fail then edit the file ".../msys/1.0/etc/fstab" so that it
+   contains the line ".../MinGW /mingw" (e.g. "d:/MinGW /mingw" in my case).
+
+   Launch the msysDTK installation program and install msysDTK into the SAME
+   folder as MSYS (e.g. "D:\msys\1.0" in my case).
+
+   In the next step install bison and flex. Simply extract the trees from
+   the bzipped tarballs over the MSYS installation tree (i.e. from bin/
+   to bin/ etc.).
+
+   From the regex package copy only the file "/bin/msys-regex-0.dll" to
+   msys/1.0/bin.
+
+   DO NOT copy anything else into the MSYS tree unless you know what you are
+   doing.
+ 
+3. Installation of other necessary packages
+
+   Download the package "http://pure-lang.sourceforge.net/mingw/pure-mingw.zip"
+   prepared by Albert Graef. Then create a folder ".../MinGW/local" in your
+   MinGW tree and unpack the tree from the pure-mingw.zip into that
+   folder.
+
+   Continue creating a folder "...msys/1.0/etc/profile.d" in your MSYS tree.
+   Using your preferred text editor create a new text file named "local.sh"
+   and paste the following four lines (including double quotes) into it:
+
+export PATH=.:/d/MinGW/local/bin:/d/MinGW/bin:$PATH
+export LIBRARY_PATH="d:\mingw\local\lib;d:\mingw\lib"
+export C_INCLUDE_PATH="d:\mingw\local\include;d:\mingw\include"
+export CPLUS_INCLUDE_PATH="D:\MinGW\local\include;D:\MinGW\include\c++\3.4.5;D:\MinGW\include\c++\3.4.5\backward;D:\MinGW\include\c++\mingw32;D:\MinGW\include"
+
+   Then update the paths to real location of your MinGW tree and save the file.
+   When a new shell is started, all shell scripts from the ".../etc/profile.d"
+   folder are executed. This way we needn't to modify the profile file itself.
+
+   Your MinGW/MSYS environment should be now prepared to compile LLVM and Pure.
+
+4. LLVM compilation
+
+   Here you can follow the INSTALL file except that we did not install groff
+   and perldoc packages so that LLVM doc files cannot be generated and
+   installed. To install LLVM use the command "make -k install" and it will
+   continue over the complaints about missing those two packages.
+
+   === GCC 4.4 NOTES ===
+
+   When using gcc-4.4, you need to do the following to compile LLVM 2.5:
+
+   - add the directive "#include <stdio.h>" near the beginning of
+     .../llvm-2.5/lib/System/Path.cpp
+
+   - compile with "make CXXFLAGS=-fexceptions"
+
+5. Pure compilation
+
+   Follow the instructions in the INSTALL file.
+
+   === GCC 4.4 NOTES ===
+
+   When using gcc-4.4, you'll need the pthreads library. If this isn't already
+   included in your mingw installation, download the file
+   "ftp://sources.redhat.com/pub/pthreads-win32/dll-latest/lib/pthreadGC2.dll"
+   and place it into the .../mingw/bin folder.
+
+   Get a post-0.28 version of Pure (use svn, or Pure >= 0.29 when it comes
+   out). You can also get Pure 0.28 to compile with gcc-4.4, just add
+   -lpthread to the link line (LIBS variable in the Makefile) and you should
+   be set.

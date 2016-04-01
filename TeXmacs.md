@@ -1,0 +1,10 @@
+# Using Pure with TeXmacs #
+
+
+<a href='http://wiki.pure-lang.googlecode.com/hg/texmacs.png'><img src='http://wiki.pure-lang.googlecode.com/hg/texmacs-mini.png' align='right' /></a>
+
+Pure 0.56 and later have full support for [TeXmacs](http://www.texmacs.org/), the free scientific text editor from the GNU Project. Pure can be run as a plugin inside TeXmacs, which allows you to use TeXmacs as an alternative frontend to the Pure interpreter. The distributed plugin can also be used with the mathematical input and output capabilities that TeXmacs provides. Using Pure along with the Pure [Octave](Octave.md) and [Reduce](Reduce.md) modules in TeXmacs provides you with a fairly comprehensive scientific computing tool. It also adds an entirely new dimension to Pure programming, since Pure programs can now be written in customary mathematical notation and the results can be directly incorporated into high-quality mathematical typesetting.
+
+Please check the [installation instructions](http://docs.pure-lang.googlecode.com/hg/install.html#texmacs-plugin) for information on how to install the TeXmacs plugin. A description of the interface can be found in "The Pure TeXmacs Plugin" article ([pdf](http://wiki.pure-lang.googlecode.com/hg/docs/pure-texmacs.en.pdf), [texmacs](http://pure-lang.googlecode.com/hg/pure/texmacs/plugins/pure/doc/pure-texmacs.en.tm)). Some further Octave/Gnuplot examples are also available ([pdf](http://wiki.pure-lang.googlecode.com/hg/docs/plot_demo.pdf), [texmacs](http://wiki.pure-lang.googlecode.com/hg/docs/plot_demo.tm)).
+
+The plugin has been tested with TeXmacs 1.0.7.16 and the current development version of TeXmacs. To make the PostScript import feature work with the stable TeXmacs version, you'll need to apply the following patch to the official TeXmacs sources and recompile: [TeXmacs-1.0.7.16-psbug.patch](http://wiki.pure-lang.googlecode.com/hg/TeXmacs-1.0.7.16-psbug.patch). (This patch resolves a bug in the PostScript import feature of TeXmacs. It shouldn't be needed for the svn version of TeXmacs any more.)
